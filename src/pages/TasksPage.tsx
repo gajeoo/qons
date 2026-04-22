@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { CheckCircle2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { ChatWidget } from "@/components/ChatWidget";
 import { FeatureGate } from "@/components/FeatureGate";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -23,9 +25,11 @@ const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
 const STATUSES = ["todo", "in_progress", "completed", "cancelled"] as const;
 
 function TasksPageInner() {
+  const user = useQuery(api.auth.currentUser);
   const tasks = useQuery(api.tasks.list) || [];
   const staff = useQuery(api.staffMembers.list) || [];
   const properties = useQuery(api.properties.list) || [];
+  const { isSubAccount, isWorker } = useFeatureAccess();
   const createTask = useMutation(api.tasks.create);
   const updateStatus = useMutation(api.tasks.updateStatus);
   const removeTask = useMutation(api.tasks.remove);
@@ -85,6 +89,33 @@ function TasksPageInner() {
           <Plus className="size-4" /> New Task
         </Button>
       </div>
+
+      {!isWorker && !isSubAccount && user?._id && (
+        <Card className="overflow-hidden border-sky-200/70 bg-gradient-to-br from-sky-50/80 via-background to-blue-50/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Task Assistant</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChatWidget
+              layout="embedded"
+              source="dashboard"
+              title="Task Planning Assistant"
+              subtitle="Use it to break down work, assign owners, and suggest automation"
+              inputPlaceholder="Ask for task plans, checklists, delegation ideas..."
+              visitorId={`user_${user._id}`}
+              visitorName={user.name ?? undefined}
+              visitorEmail={user.email ?? undefined}
+              metadata={JSON.stringify({ page: "tasks" })}
+              suggestedPrompts={[
+                "Create a move-in checklist",
+                "Break down a property inspection into tasks",
+                "What tasks should I automate weekly?",
+                "How should I delegate maintenance work?",
+              ]}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {tasks.map((task) => (

@@ -3,6 +3,7 @@ import {
   AlertTriangle, Bot, Calendar, ChevronLeft, ChevronRight, Clock,
   Loader2, Plus, Sparkles, Trash2, X, Zap,
 } from "lucide-react";
+import { ChatWidget } from "@/components/ChatWidget";
 import { FeatureGate } from "@/components/FeatureGate";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +20,8 @@ import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import type { Id } from "../../convex/_generated/dataModel";
 
 export function SchedulePage() {
-  const { isWorker } = useFeatureAccess();
+  const user = useQuery(api.auth.currentUser);
+  const { isWorker, isSubAccount } = useFeatureAccess();
 
   const [currentDate, setCurrentDate] = useState(() => {
     const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -126,6 +128,30 @@ export function SchedulePage() {
           </div>
         )}
       </div>
+
+      {!isWorker && !isSubAccount && user?._id && (
+        <Card className="overflow-hidden border-sky-200/70 bg-gradient-to-br from-sky-50/80 via-background to-blue-50/50">
+          <CardContent className="p-4">
+            <ChatWidget
+              layout="embedded"
+              source="dashboard"
+              title="Scheduling Assistant"
+              subtitle="Ask for coverage plans, staffing ideas, and scheduling guidance"
+              inputPlaceholder="Ask about coverage gaps, shift planning, staffing balance..."
+              visitorId={`user_${user._id}`}
+              visitorName={user.name ?? undefined}
+              visitorEmail={user.email ?? undefined}
+              metadata={JSON.stringify({ page: "schedule" })}
+              suggestedPrompts={[
+                "Help me plan next week's coverage",
+                "How do I fill open shifts faster?",
+                "Suggest a schedule for a busy property",
+                "What should I check before auto-scheduling?",
+              ]}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">

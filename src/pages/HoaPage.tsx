@@ -3,6 +3,7 @@ import {
   AlertTriangle, BadgeDollarSign, CalendarDays, FileText, Landmark, Megaphone, MessageSquare, Plus, PlusCircle, Vote,
 } from "lucide-react";
 import { useState } from "react";
+import { ChatWidget } from "@/components/ChatWidget";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -40,6 +42,7 @@ const violationNoticeTemplateDefaults = {
 type ViolationNoticeTemplate = keyof typeof violationNoticeTemplateDefaults;
 
 function HoaPageInner() {
+  const user = useQuery(api.auth.currentUser);
   const properties = useQuery(api.properties.list) || [];
   const violations = useQuery(api.hoa.listViolations, {}) || [];
   const dues = useQuery(api.hoa.listDues, {}) || [];
@@ -68,6 +71,7 @@ function HoaPageInner() {
   const updateArcReq = useMutation(api.hoa.updateArcRequest);
   const sendMsg = useMutation(api.hoa.sendMessage);
   const removeMsg = useMutation(api.hoa.removeMessage);
+  const { isSubAccount, isWorker } = useFeatureAccess();
 
   const [activeDialog, setActiveDialog] = useState<string | null>(null);
   const [selectedViolationId, setSelectedViolationId] = useState<Id<"hoaViolations"> | null>(null);
@@ -251,6 +255,30 @@ function HoaPageInner() {
         <h1 className="text-2xl font-bold tracking-tight">HOA Management</h1>
         <p className="text-muted-foreground">Violations, dues collection, board voting, ARC requests & resident messaging</p>
       </div>
+
+      {!isWorker && !isSubAccount && user?._id && (
+        <Card className="overflow-hidden border-sky-200/70 bg-gradient-to-br from-sky-50/80 via-background to-blue-50/50">
+          <CardContent className="p-4">
+            <ChatWidget
+              layout="embedded"
+              source="dashboard"
+              title="HOA Assistant"
+              subtitle="Use it for violations, dues, meetings, ARC requests, and resident communications"
+              inputPlaceholder="Ask about HOA notices, dues workflows, meetings, ARC reviews..."
+              visitorId={`user_${user._id}`}
+              visitorName={user.name ?? undefined}
+              visitorEmail={user.email ?? undefined}
+              metadata={JSON.stringify({ page: "hoa" })}
+              suggestedPrompts={[
+                "How should I handle overdue dues?",
+                "Draft a violation follow-up plan",
+                "What should go in the next board meeting agenda?",
+                "How do I review an ARC request fairly?",
+              ]}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Stats */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
