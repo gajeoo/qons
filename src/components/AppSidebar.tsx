@@ -41,7 +41,6 @@ import {
 } from "./ui/dropdown-menu";
 import {
   Sidebar,
-  SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
@@ -106,15 +105,11 @@ function NavLink({
   if (locked) {
     return (
       <SidebarMenuItem>
-        <SidebarMenuButton
-          asChild
-          isActive={false}
-          className="h-auto min-h-8 opacity-50 cursor-not-allowed"
-        >
-          <Link to={href} onClick={() => setOpenMobile(false)} className="w-full min-w-0">
-            <Icon className="shrink-0 self-start mt-0.5" />
-            <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">{label}</span>
-            <Lock className="size-3 text-muted-foreground shrink-0 self-start mt-0.5" />
+        <SidebarMenuButton asChild isActive={false} className="opacity-50 cursor-not-allowed">
+          <Link to={href} onClick={() => setOpenMobile(false)}>
+            <Icon />
+            <span className="flex-1">{label}</span>
+            <Lock className="size-3 text-muted-foreground" />
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -123,10 +118,10 @@ function NavLink({
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={isActive} className="h-auto min-h-8">
-        <Link to={href} onClick={() => setOpenMobile(false)} className="w-full min-w-0">
-          <Icon className="shrink-0 self-start mt-0.5" />
-          <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">{label}</span>
+      <SidebarMenuButton asChild isActive={isActive}>
+        <Link to={href} onClick={() => setOpenMobile(false)}>
+          <Icon />
+          <span>{label}</span>
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -142,59 +137,67 @@ function SidebarNav() {
   const navItems = role === "worker" ? workerNavItems : customerNavItems;
 
   return (
-    <SidebarContent className="overflow-y-auto">
-      <SidebarGroup>
-        <SidebarGroupLabel className="flex items-center justify-between">
-          <span>Operations</span>
-          {isOnTrial && (
-            <Badge variant="outline" className="text-[10px] h-5 border-teal/30 text-teal">
-              <Sparkles className="size-2.5 mr-1" /> Trial: {trialDaysRemaining}d
-            </Badge>
-          )}
-          {!isOnTrial && planLabel !== "No Plan" && planLabel !== "Admin" && (
-            <Badge variant="outline" className="text-[10px] h-5">
-              {planLabel}
-            </Badge>
-          )}
-        </SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {navItems.map((item) => (
-              <NavLink
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                icon={item.icon}
-                isActive={location.pathname === item.href}
-                locked={!hasFeature(item.feature)}
-              />
-            ))}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-
-      {isAdmin && (
+    // Explicit flex column that owns the middle space between header and footer.
+    // flex-1 + min-h-0 are both required for a flex child to scroll its own overflow.
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Ops list — grows to fill all available space and scrolls when overflowing */}
+      <div className="flex-1 overflow-y-auto min-h-0">
         <SidebarGroup>
-          <SidebarGroupLabel className="flex items-center gap-1.5">
-            <Shield className="size-3" />
-            Admin
+          <SidebarGroupLabel className="flex items-center justify-between">
+            <span>Operations</span>
+            {isOnTrial && (
+              <Badge variant="outline" className="text-[10px] h-5 border-teal/30 text-teal">
+                <Sparkles className="size-2.5 mr-1" /> Trial: {trialDaysRemaining}d
+              </Badge>
+            )}
+            {!isOnTrial && planLabel !== "No Plan" && planLabel !== "Admin" && (
+              <Badge variant="outline" className="text-[10px] h-5">
+                {planLabel}
+              </Badge>
+            )}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {adminNavItems.map((item) => (
+              {navItems.map((item) => (
                 <NavLink
                   key={item.href}
                   href={item.href}
                   label={item.label}
                   icon={item.icon}
                   isActive={location.pathname === item.href}
+                  locked={!hasFeature(item.feature)}
                 />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+      </div>
+
+      {/* Admin section — always visible, never scrolls away, never overlaps ops */}
+      {isAdmin && (
+        <div className="shrink-0 border-t border-sidebar-border">
+          <SidebarGroup>
+            <SidebarGroupLabel className="flex items-center gap-1.5">
+              <Shield className="size-3" />
+              Admin
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminNavItems.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    href={item.href}
+                    label={item.label}
+                    icon={item.icon}
+                    isActive={location.pathname === item.href}
+                  />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </div>
       )}
-    </SidebarContent>
+    </div>
   );
 }
 
