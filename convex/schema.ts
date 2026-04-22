@@ -169,6 +169,7 @@ const schema = defineSchema({
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
     imageUrl: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")),
   })
     .index("by_userId", ["userId"])
     .index("by_status", ["status"]),

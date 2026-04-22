@@ -25,6 +25,7 @@ type PropertyForm = {
   type: "residential" | "commercial" | "mixed" | "hoa"; units: string;
   contactName: string; contactPhone: string; contactEmail: string; notes: string;
   imageUrl?: string;
+  imageStorageId?: Id<"_storage">;
   latitude?: number; longitude?: number;
 };
 
@@ -40,6 +41,7 @@ function PropertiesPageInner() {
   const create = useMutation(api.properties.create);
   const update = useMutation(api.properties.update);
   const remove = useMutation(api.properties.remove);
+  const generateImageUploadUrl = useMutation(api.properties.generateImageUploadUrl);
   const smartImport = useMutation(api.imports.smartImport);
 
   const [showForm, setShowForm] = useState(false);
@@ -48,6 +50,7 @@ function PropertiesPageInner() {
   const [form, setForm] = useState<PropertyForm>(emptyForm);
   const [search, setSearch] = useState("");
   const [importing, setImporting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [historyFilter, setHistoryFilter] = useState<"all" | "success" | "partial" | "failed">("all");
 
@@ -68,6 +71,7 @@ function PropertiesPageInner() {
       type: p.type, units: String(p.units), contactName: p.contactName || "",
       contactPhone: p.contactPhone || "", contactEmail: p.contactEmail || "", notes: p.notes || "",
       imageUrl: p.imageUrl,
+      imageStorageId: p.imageStorageId,
       latitude: p.latitude, longitude: p.longitude,
     });
     setEditingId(p._id);
@@ -80,6 +84,7 @@ function PropertiesPageInner() {
         ...form,
         units: parseInt(form.units) || 0,
         imageUrl: form.imageUrl || undefined,
+        imageStorageId: form.imageStorageId,
         latitude: form.latitude,
         longitude: form.longitude,
       };
@@ -126,6 +131,39 @@ function PropertiesPageInner() {
       toast.error(e.message || "Import failed");
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleImageUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const uploadUrl = await generateImageUploadUrl({});
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const { storageId } = await response.json();
+      setForm({
+        ...form,
+        imageStorageId: storageId,
+        imageUrl: "",
+      });
+      toast.success("Image uploaded");
+    } catch (e: any) {
+      toast.error(e.message || "Image upload failed");
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -183,6 +221,11 @@ function PropertiesPageInner() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((p) => (
             <Card key={p._id} className="group hover:shadow-md transition-shadow">
+              {p.imageUrl ? (
+                <div className="aspect-[16/9] w-full overflow-hidden rounded-t-lg border-b bg-muted/20">
+                  <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" loading="lazy" />
+                </div>
+              ) : null}
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
@@ -275,16 +318,31 @@ function PropertiesPageInner() {
             </div>
             <div><Label>Notes</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} /></div>
             <div>
-              <Label>Property Image URL</Label>
+              <Label>Property Image (Upload or URL)</Label>
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void handleImageUpload(file);
+                  }
+                }}
+                disabled={uploadingImage}
+                className="mb-2"
+              />
+              {form.imageStorageId ? (
+                <p className="mb-2 text-xs text-muted-foreground">Uploaded image attached.</p>
+              ) : null}
               <Input
                 value={form.imageUrl || ""}
-                onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+                onChange={(e) => setForm({ ...form, imageUrl: e.target.value, imageStorageId: undefined })}
                 placeholder="https://..."
               />
             </div>
             <div className="flex gap-3 justify-end pt-2">
               <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button onClick={handleSubmit} className="bg-teal text-white hover:bg-teal/90" disabled={!form.name || !form.address || !form.city || !form.state || !form.zip || !form.units}>
+              <Button onClick={handleSubmit} className="bg-teal text-white hover:bg-teal/90" disabled={uploadingImage || !form.name || !form.address || !form.city || !form.state || !form.zip || !form.units}>
                 {editingId ? "Save Changes" : "Add Property"}
               </Button>
             </div>

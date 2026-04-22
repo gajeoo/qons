@@ -7,10 +7,22 @@ export const list = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    return await ctx.db
+    const properties = await ctx.db
       .query("properties")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .collect();
+
+    return await Promise.all(
+      properties.map(async (property) => {
+        const storageImageUrl = property.imageStorageId
+          ? await ctx.storage.getUrl(property.imageStorageId)
+          : null;
+        return {
+          ...property,
+          imageUrl: property.imageUrl ?? storageImageUrl ?? undefined,
+        };
+      }),
+    );
   },
 });
 
@@ -21,7 +33,22 @@ export const get = query({
     if (!userId) return null;
     const property = await ctx.db.get(args.id);
     if (!property || property.userId !== userId) return null;
-    return property;
+    const storageImageUrl = property.imageStorageId
+      ? await ctx.storage.getUrl(property.imageStorageId)
+      : null;
+    return {
+      ...property,
+      imageUrl: property.imageUrl ?? storageImageUrl ?? undefined,
+    };
+  },
+});
+
+export const generateImageUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    return await ctx.storage.generateUploadUrl();
   },
 });
 
@@ -60,6 +87,7 @@ export const create = mutation({
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
     imageUrl: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -91,6 +119,7 @@ export const update = mutation({
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
     imageUrl: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
