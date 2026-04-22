@@ -107,6 +107,7 @@ function TasksPageInner() {
               visitorEmail={user.email ?? undefined}
               metadata={JSON.stringify({ page: "tasks" })}
               suggestedPrompts={[
+                "Create task: Prepare vendor walkthrough checklist",
                 "Create a move-in checklist",
                 "Break down a property inspection into tasks",
                 "What tasks should I automate weekly?",

@@ -270,6 +270,7 @@ function HoaPageInner() {
               visitorEmail={user.email ?? undefined}
               metadata={JSON.stringify({ page: "hoa" })}
               suggestedPrompts={[
+                "Create task: Call residents with overdue dues",
                 "How should I handle overdue dues?",
                 "Draft a violation follow-up plan",
                 "What should go in the next board meeting agenda?",

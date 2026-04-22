@@ -143,6 +143,7 @@ export function SchedulePage() {
               visitorEmail={user.email ?? undefined}
               metadata={JSON.stringify({ page: "schedule" })}
               suggestedPrompts={[
+                "Create task: Review next week's open shifts",
                 "Help me plan next week's coverage",
                 "How do I fill open shifts faster?",
                 "Suggest a schedule for a busy property",

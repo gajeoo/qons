@@ -293,6 +293,7 @@ export function DashboardPage() {
               visitorEmail={user.email ?? undefined}
               metadata={JSON.stringify({ page: "dashboard" })}
               suggestedPrompts={[
+                "Create task: Follow up on overdue HOA dues",
                 "Help me plan next week's schedule",
                 "What should I automate first?",
                 "Create a task checklist for a new property",
