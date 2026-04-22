@@ -389,6 +389,7 @@ const schema = defineSchema({
     reportedDate: v.string(),
     resolvedDate: v.optional(v.string()),
     notes: v.optional(v.string()),
+    attachmentStorageIds: v.optional(v.array(v.id("_storage"))),
     noticeHistory: v.optional(v.array(v.object({
       template: v.union(
         v.literal("courtesy_warning"),
@@ -499,6 +500,7 @@ const schema = defineSchema({
     submittedDate: v.string(),
     reviewedDate: v.optional(v.string()),
     reviewNotes: v.optional(v.string()),
+    attachmentStorageIds: v.optional(v.array(v.id("_storage"))),
   })
     .index("by_userId", ["userId"])
     .index("by_propertyId", ["propertyId"])

@@ -52,6 +52,7 @@ function HoaPageInner() {
   const reserveStats = useQuery(api.reserveFund.getStats);
 
   const createViolation = useMutation(api.hoa.createViolation);
+  const generateAttachmentUploadUrl = useMutation(api.hoa.generateAttachmentUploadUrl);
   const updateViolation = useMutation(api.hoa.updateViolation);
   const sendViolationNotice = useMutation(api.hoa.sendViolationNotice);
   const createDue = useMutation(api.hoa.createDue);
@@ -73,12 +74,40 @@ function HoaPageInner() {
   const getPropertyName = (id: Id<"properties">) => properties.find((p) => p._id === id)?.name || "";
 
   // === VIOLATIONS ===
-  const [vForm, setVForm] = useState({ propertyId: "", unit: "", residentName: "", type: "noise" as const, description: "", fineAmount: "" });
+  const [vForm, setVForm] = useState({ propertyId: "", unit: "", residentName: "", type: "noise" as const, description: "", fineAmount: "", attachmentStorageIds: [] as Id<"_storage">[] });
+  const [uploadingViolationAttachment, setUploadingViolationAttachment] = useState(false);
+
+  const uploadHoaAttachment = async (file: File) => {
+    const uploadUrl = await generateAttachmentUploadUrl({});
+    const response = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    if (!response.ok) throw new Error("Upload failed");
+    const { storageId } = await response.json();
+    return storageId as Id<"_storage">;
+  };
+
+  const handleUploadViolationAttachment = async (file: File) => {
+    setUploadingViolationAttachment(true);
+    try {
+      const storageId = await uploadHoaAttachment(file);
+      setVForm({ ...vForm, attachmentStorageIds: [...vForm.attachmentStorageIds, storageId] });
+      toast.success("Violation attachment uploaded");
+    } catch (e: any) {
+      toast.error(e.message || "Upload failed");
+    } finally {
+      setUploadingViolationAttachment(false);
+    }
+  };
+
   const handleCreateViolation = async () => {
     if (!vForm.propertyId || !vForm.unit || !vForm.residentName || !vForm.description) { toast.error("Fill required fields"); return; }
     await createViolation({
       propertyId: vForm.propertyId as Id<"properties">, unit: vForm.unit, residentName: vForm.residentName,
       type: vForm.type, description: vForm.description, fineAmount: vForm.fineAmount ? parseFloat(vForm.fineAmount) : undefined,
+      attachmentStorageIds: vForm.attachmentStorageIds,
     });
     toast.success("Violation reported"); setActiveDialog(null);
   };
@@ -157,12 +186,28 @@ function HoaPageInner() {
   };
 
   // === ARC ===
-  const [arcForm, setArcForm] = useState({ propertyId: "", unit: "", residentName: "", requestType: "exterior_modification" as const, description: "" });
+  const [arcForm, setArcForm] = useState({ propertyId: "", unit: "", residentName: "", requestType: "exterior_modification" as const, description: "", attachmentStorageIds: [] as Id<"_storage">[] });
+  const [uploadingArcAttachment, setUploadingArcAttachment] = useState(false);
+
+  const handleUploadArcAttachment = async (file: File) => {
+    setUploadingArcAttachment(true);
+    try {
+      const storageId = await uploadHoaAttachment(file);
+      setArcForm({ ...arcForm, attachmentStorageIds: [...arcForm.attachmentStorageIds, storageId] });
+      toast.success("ARC attachment uploaded");
+    } catch (e: any) {
+      toast.error(e.message || "Upload failed");
+    } finally {
+      setUploadingArcAttachment(false);
+    }
+  };
+
   const handleCreateArc = async () => {
     if (!arcForm.propertyId || !arcForm.unit || !arcForm.residentName || !arcForm.description) { toast.error("Fill required fields"); return; }
     await createArcReq({
       propertyId: arcForm.propertyId as Id<"properties">, unit: arcForm.unit,
       residentName: arcForm.residentName, requestType: arcForm.requestType, description: arcForm.description,
+      attachmentStorageIds: arcForm.attachmentStorageIds,
     });
     toast.success("ARC request submitted"); setActiveDialog(null);
   };
@@ -253,6 +298,13 @@ function HoaPageInner() {
                   <p className="text-sm text-muted-foreground">{getPropertyName(v.propertyId)} · {v.type} · {v.reportedDate}</p>
                   <p className="text-sm">{v.description}</p>
                   {v.fineAmount != null && <p className="text-sm font-medium text-red-600">Fine: ${v.fineAmount}</p>}
+                  {v.attachmentUrls && v.attachmentUrls.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {v.attachmentUrls.map((url, index) => (
+                        <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="text-xs text-teal underline">Attachment {index + 1}</a>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge className={violationStatusColors[v.status]}>{v.status.replace("_", " ")}</Badge>
@@ -506,6 +558,13 @@ function HoaPageInner() {
                     <p className="text-sm text-muted-foreground">{getPropertyName(r.propertyId)} · {r.requestType.replace(/_/g, " ")} · {r.submittedDate}</p>
                     <p className="text-sm">{r.description}</p>
                     {r.reviewNotes && <p className="text-sm text-blue-600">Review: {r.reviewNotes}</p>}
+                    {r.attachmentUrls && r.attachmentUrls.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {r.attachmentUrls.map((url, index) => (
+                          <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="text-xs text-teal underline">Attachment {index + 1}</a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className={arcColors[r.status]}>{r.status.replace("_", " ")}</Badge>
@@ -632,9 +691,26 @@ function HoaPageInner() {
               <div><Label>Fine Amount ($)</Label><Input type="number" value={vForm.fineAmount} onChange={(e) => setVForm({ ...vForm, fineAmount: e.target.value })} /></div>
             </div>
             <div><Label>Description *</Label><Textarea value={vForm.description} onChange={(e) => setVForm({ ...vForm, description: e.target.value })} /></div>
+            <div>
+              <Label>Attachments (images/pdf)</Label>
+              <Input
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void handleUploadViolationAttachment(file);
+                  }
+                }}
+                disabled={uploadingViolationAttachment}
+              />
+              {vForm.attachmentStorageIds.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">{vForm.attachmentStorageIds.length} attachment(s) uploaded</p>
+              )}
+            </div>
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setActiveDialog(null)}>Cancel</Button>
-              <Button onClick={handleCreateViolation} className="bg-teal text-white hover:bg-teal/90">Report</Button>
+              <Button onClick={handleCreateViolation} className="bg-teal text-white hover:bg-teal/90" disabled={uploadingViolationAttachment}>Report</Button>
             </div>
           </div>
         </DialogContent>
@@ -765,9 +841,26 @@ function HoaPageInner() {
               </Select>
             </div>
             <div><Label>Description *</Label><Textarea value={arcForm.description} onChange={(e) => setArcForm({ ...arcForm, description: e.target.value })} /></div>
+            <div>
+              <Label>Attachments (images/pdf)</Label>
+              <Input
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void handleUploadArcAttachment(file);
+                  }
+                }}
+                disabled={uploadingArcAttachment}
+              />
+              {arcForm.attachmentStorageIds.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">{arcForm.attachmentStorageIds.length} attachment(s) uploaded</p>
+              )}
+            </div>
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setActiveDialog(null)}>Cancel</Button>
-              <Button onClick={handleCreateArc} className="bg-teal text-white hover:bg-teal/90">Submit</Button>
+              <Button onClick={handleCreateArc} className="bg-teal text-white hover:bg-teal/90" disabled={uploadingArcAttachment}>Submit</Button>
             </div>
           </div>
         </DialogContent>

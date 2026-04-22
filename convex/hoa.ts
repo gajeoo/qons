@@ -20,7 +20,26 @@ export const listViolations = query({
         .collect();
     }
     if (args.status) violations = violations.filter((v) => v.status === args.status);
-    return violations;
+    return await Promise.all(
+      violations.map(async (violation) => {
+        const attachmentUrls = await Promise.all(
+          (violation.attachmentStorageIds ?? []).map(async (storageId) => await ctx.storage.getUrl(storageId)),
+        );
+        return {
+          ...violation,
+          attachmentUrls: attachmentUrls.filter((url): url is string => Boolean(url)),
+        };
+      }),
+    );
+  },
+});
+
+export const generateAttachmentUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    return await ctx.storage.generateUploadUrl();
   },
 });
 
@@ -33,6 +52,7 @@ export const createViolation = mutation({
     description: v.string(),
     fineAmount: v.optional(v.number()),
     notes: v.optional(v.string()),
+    attachmentStorageIds: v.optional(v.array(v.id("_storage"))),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -41,6 +61,7 @@ export const createViolation = mutation({
       ...args, userId, status: "reported",
       reportedDate: new Date().toISOString().split("T")[0],
       noticeHistory: [],
+      attachmentStorageIds: args.attachmentStorageIds ?? [],
     });
   },
 });
@@ -380,15 +401,29 @@ export const listArcRequests = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
+    let requests;
     if (args.propertyId) {
-      const reqs = await ctx.db.query("arcRequests")
+      requests = await ctx.db.query("arcRequests")
         .withIndex("by_propertyId", (q) => q.eq("propertyId", args.propertyId!))
         .collect();
-      return reqs.filter((r) => r.userId === userId);
+      requests = requests.filter((request) => request.userId === userId);
+    } else {
+      requests = await ctx.db.query("arcRequests")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .collect();
     }
-    return await ctx.db.query("arcRequests")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect();
+
+    return await Promise.all(
+      requests.map(async (request) => {
+        const attachmentUrls = await Promise.all(
+          (request.attachmentStorageIds ?? []).map(async (storageId) => await ctx.storage.getUrl(storageId)),
+        );
+        return {
+          ...request,
+          attachmentUrls: attachmentUrls.filter((url): url is string => Boolean(url)),
+        };
+      }),
+    );
   },
 });
 
@@ -399,6 +434,7 @@ export const createArcRequest = mutation({
     residentName: v.string(),
     requestType: v.union(v.literal("exterior_modification"), v.literal("landscaping"), v.literal("fence"), v.literal("paint"), v.literal("addition"), v.literal("other")),
     description: v.string(),
+    attachmentStorageIds: v.optional(v.array(v.id("_storage"))),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -406,6 +442,7 @@ export const createArcRequest = mutation({
     return await ctx.db.insert("arcRequests", {
       ...args, userId, status: "submitted",
       submittedDate: new Date().toISOString().split("T")[0],
+      attachmentStorageIds: args.attachmentStorageIds ?? [],
     });
   },
 });
