@@ -152,24 +152,30 @@ export const getDueSummary = query({
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .collect();
 
+    const toSafeAmount = (value: unknown) => {
+      const amount = typeof value === "number" ? value : Number(value);
+      return Number.isFinite(amount) ? amount : 0;
+    };
+
     const overdueByPropertyMap = new Map<string, { propertyId: string; overdueAmount: number; overdueCount: number }>();
 
     for (const due of dues) {
       if (due.status !== "overdue") continue;
-      const current = overdueByPropertyMap.get(due.propertyId) ?? {
-        propertyId: due.propertyId,
+      const propertyId = String(due.propertyId ?? "unknown");
+      const current = overdueByPropertyMap.get(propertyId) ?? {
+        propertyId,
         overdueAmount: 0,
         overdueCount: 0,
       };
-      current.overdueAmount += due.amount;
+      current.overdueAmount += toSafeAmount(due.amount);
       current.overdueCount += 1;
-      overdueByPropertyMap.set(due.propertyId, current);
+      overdueByPropertyMap.set(propertyId, current);
     }
 
     return {
-      totalPending: dues.filter((due) => due.status === "pending").reduce((sum, due) => sum + due.amount, 0),
-      totalOverdue: dues.filter((due) => due.status === "overdue").reduce((sum, due) => sum + due.amount, 0),
-      totalCollected: dues.filter((due) => due.status === "paid").reduce((sum, due) => sum + due.amount, 0),
+      totalPending: dues.filter((due) => due.status === "pending").reduce((sum, due) => sum + toSafeAmount(due.amount), 0),
+      totalOverdue: dues.filter((due) => due.status === "overdue").reduce((sum, due) => sum + toSafeAmount(due.amount), 0),
+      totalCollected: dues.filter((due) => due.status === "paid").reduce((sum, due) => sum + toSafeAmount(due.amount), 0),
       pendingCount: dues.filter((due) => due.status === "pending").length,
       overdueCount: dues.filter((due) => due.status === "overdue").length,
       collectedCount: dues.filter((due) => due.status === "paid").length,
