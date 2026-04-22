@@ -228,6 +228,12 @@ export function SettingsPage() {
               <p className="text-sm text-muted-foreground mt-1">
                 {isPaidSubscriber ? "Active recurring subscription" : "No active subscription"}
               </p>
+              {subscription?.billingProvider ? (
+                <p className="text-xs text-muted-foreground mt-1 capitalize">
+                  Provider: {subscription.billingProvider}
+                  {subscription.billingCycle ? ` • ${subscription.billingCycle}` : ""}
+                </p>
+              ) : null}
               {subscription?.currentPeriodEnd ? (
                 <p className="text-xs text-muted-foreground mt-1">
                   Billing period ends on {new Date(subscription.currentPeriodEnd).toLocaleDateString("en-US")}

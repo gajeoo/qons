@@ -34,6 +34,8 @@ Ready-to-paste environment blocks are in `VERCEL_ENV_PAYLOAD.md`.
 Backend runtime secrets used by Convex functions must be set in Convex, not in Vercel.
 Examples include Stripe secret keys, webhook secrets, and Viktor Spaces secrets.
 
+For PayPal subscriptions, you can either set `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_PLAN_MONTHLY`, `PAYPAL_PLAN_ANNUAL`, and optional `PAYPAL_MODE` in Convex, or save those values in the admin Subscribers page inside the app.
+
 Use:
 
 ```bash

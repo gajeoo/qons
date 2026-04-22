@@ -1,6 +1,6 @@
 import { useAction, useQuery } from "convex/react";
 import { useConvexAuth } from "convex/react";
-import { ArrowRight, Check, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { PayPalCheckoutButton } from "@/components/PayPalButton";
@@ -76,17 +76,22 @@ export function PricingPage() {
   const [paypalClientId, setPaypalClientId] = useState<string | null>(
     import.meta.env.VITE_PAYPAL_CLIENT_ID || null,
   );
+  const [checkingPayPal, setCheckingPayPal] = useState(!paypalClientId);
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">(
     "monthly",
   );
 
   useEffect(() => {
-    if (paypalClientId) return;
+    if (paypalClientId) {
+      setCheckingPayPal(false);
+      return;
+    }
     checkPayPal({})
       .then((r) => {
         if (r.configured && r.clientId) setPaypalClientId(r.clientId);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setCheckingPayPal(false));
   }, [paypalClientId, checkPayPal]);
 
   const now = Date.now();
@@ -217,7 +222,7 @@ export function PricingPage() {
                         onSuccess={() => navigate("/dashboard")}
                       />
                     </div>
-                  ) : (
+                  ) : checkingPayPal ? (
                     <Button
                       size="lg"
                       className="w-full bg-sky-500 hover:bg-sky-600 text-white h-13 text-base font-semibold rounded-xl"
@@ -225,6 +230,18 @@ export function PricingPage() {
                     >
                       <Loader2 className="size-4 animate-spin mr-2" /> Loading payment...
                     </Button>
+                  ) : (
+                    <div className="rounded-xl border border-amber-300/60 bg-amber-50/80 px-4 py-3 text-left text-sm text-amber-900">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-medium">Billing is not configured yet.</p>
+                          <p className="text-xs text-amber-800/80 mt-1">
+                            An administrator needs to add the PayPal client ID, secret, and recurring plan IDs before subscriptions can start.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

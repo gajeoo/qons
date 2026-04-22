@@ -141,10 +141,16 @@ http.route({
         });
       }
 
-      const body = await req.json() as { clientId: string; clientSecret: string; mode: string };
+      const body = await req.json() as {
+        clientId: string;
+        clientSecret: string;
+        monthlyPlanId: string;
+        annualPlanId: string;
+        mode: string;
+      };
       
-      if (!body.clientId || !body.clientSecret) {
-        return new Response(JSON.stringify({ error: "Missing clientId or clientSecret" }), {
+      if (!body.clientId || !body.clientSecret || !body.monthlyPlanId || !body.annualPlanId) {
+        return new Response(JSON.stringify({ error: "Missing clientId, clientSecret, monthlyPlanId, or annualPlanId" }), {
           status: 400,
           headers: { "Content-Type": "application/json" },
         });
@@ -152,6 +158,8 @@ http.route({
 
       await ctx.runMutation(internal.paypal._upsertSetting, { key: "PAYPAL_CLIENT_ID", value: body.clientId });
       await ctx.runMutation(internal.paypal._upsertSetting, { key: "PAYPAL_CLIENT_SECRET", value: body.clientSecret });
+      await ctx.runMutation(internal.paypal._upsertSetting, { key: "PAYPAL_PLAN_MONTHLY", value: body.monthlyPlanId });
+      await ctx.runMutation(internal.paypal._upsertSetting, { key: "PAYPAL_PLAN_ANNUAL", value: body.annualPlanId });
       await ctx.runMutation(internal.paypal._upsertSetting, { key: "PAYPAL_MODE", value: body.mode || "live" });
 
       return new Response(JSON.stringify({ success: true }), {

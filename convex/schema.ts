@@ -84,6 +84,12 @@ const schema = defineSchema({
     stripeCustomerId: v.string(),
     stripeSubscriptionId: v.string(),
     stripePriceId: v.string(),
+    billingProvider: v.optional(
+      v.union(v.literal("stripe"), v.literal("paypal"), v.literal("admin")),
+    ),
+    billingCycle: v.optional(
+      v.union(v.literal("monthly"), v.literal("annual")),
+    ),
     plan: v.union(
       v.literal("starter"),
       v.literal("pro"),

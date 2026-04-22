@@ -2,6 +2,21 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
 
+function getMonthlyRecurringRevenueCents(subscription: {
+  plan: "starter" | "pro" | "enterprise";
+  billingCycle?: "monthly" | "annual";
+}) {
+  if (subscription.plan === "enterprise") {
+    return 29900;
+  }
+
+  if (subscription.plan === "pro") {
+    return 14900;
+  }
+
+  return subscription.billingCycle === "annual" ? 4999 : 4999;
+}
+
 const subscriptionValidator = v.object({
   _id: v.id("subscriptions"),
   _creationTime: v.number(),
@@ -9,6 +24,12 @@ const subscriptionValidator = v.object({
   stripeCustomerId: v.string(),
   stripeSubscriptionId: v.string(),
   stripePriceId: v.string(),
+  billingProvider: v.optional(
+    v.union(v.literal("stripe"), v.literal("paypal"), v.literal("admin")),
+  ),
+  billingCycle: v.optional(
+    v.union(v.literal("monthly"), v.literal("annual")),
+  ),
   plan: v.union(
     v.literal("starter"),
     v.literal("pro"),
@@ -63,6 +84,16 @@ export const listAll = query({
       stripeCustomerId: v.string(),
       stripeSubscriptionId: v.string(),
       stripePriceId: v.string(),
+      billingProvider: v.optional(
+        v.union(
+          v.literal("stripe"),
+          v.literal("paypal"),
+          v.literal("admin"),
+        ),
+      ),
+      billingCycle: v.optional(
+        v.union(v.literal("monthly"), v.literal("annual")),
+      ),
       plan: v.union(
         v.literal("starter"),
         v.literal("pro"),
@@ -165,14 +196,8 @@ export const getStats = query({
     const active = allSubs.filter((s) => s.status === "active");
 
     // Calculate MRR based on plan prices
-    const planPrices: Record<string, number> = {
-      starter: 4900,
-      pro: 14900,
-      enterprise: 29900,
-    };
-
     const mrr = active.reduce(
-      (sum, s) => sum + (planPrices[s.plan] ?? 0),
+      (sum, s) => sum + getMonthlyRecurringRevenueCents(s),
       0,
     );
 
@@ -198,6 +223,12 @@ export const upsertFromStripe = internalMutation({
     stripeCustomerId: v.string(),
     stripeSubscriptionId: v.string(),
     stripePriceId: v.string(),
+    billingProvider: v.optional(
+      v.union(v.literal("stripe"), v.literal("paypal"), v.literal("admin")),
+    ),
+    billingCycle: v.optional(
+      v.union(v.literal("monthly"), v.literal("annual")),
+    ),
     plan: v.union(
       v.literal("starter"),
       v.literal("pro"),
@@ -231,6 +262,8 @@ export const upsertFromStripe = internalMutation({
       await ctx.db.patch(existing._id, {
         status: args.status,
         stripePriceId: args.stripePriceId,
+        billingProvider: args.billingProvider,
+        billingCycle: args.billingCycle,
         plan: args.plan,
         currentPeriodStart: args.currentPeriodStart,
         currentPeriodEnd: args.currentPeriodEnd,
