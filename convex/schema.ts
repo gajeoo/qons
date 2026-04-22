@@ -388,6 +388,22 @@ const schema = defineSchema({
     reportedDate: v.string(),
     resolvedDate: v.optional(v.string()),
     notes: v.optional(v.string()),
+    noticeHistory: v.optional(v.array(v.object({
+      template: v.union(
+        v.literal("courtesy_warning"),
+        v.literal("fine_notice"),
+        v.literal("hearing_notice"),
+        v.literal("final_notice"),
+      ),
+      subject: v.string(),
+      message: v.string(),
+      sentAt: v.number(),
+      deliveryMethod: v.union(
+        v.literal("email"),
+        v.literal("letter"),
+        v.literal("portal"),
+      ),
+    }))),
   })
     .index("by_userId", ["userId"])
     .index("by_propertyId", ["propertyId"])

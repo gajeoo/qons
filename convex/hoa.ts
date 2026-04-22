@@ -40,6 +40,7 @@ export const createViolation = mutation({
     return await ctx.db.insert("hoaViolations", {
       ...args, userId, status: "reported",
       reportedDate: new Date().toISOString().split("T")[0],
+      noticeHistory: [],
     });
   },
 });
@@ -60,6 +61,52 @@ export const updateViolation = mutation({
     const { id, ...updates } = args;
     const filtered = Object.fromEntries(Object.entries(updates).filter(([, val]) => val !== undefined));
     await ctx.db.patch(args.id, filtered);
+  },
+});
+
+export const sendViolationNotice = mutation({
+  args: {
+    id: v.id("hoaViolations"),
+    template: v.union(
+      v.literal("courtesy_warning"),
+      v.literal("fine_notice"),
+      v.literal("hearing_notice"),
+      v.literal("final_notice"),
+    ),
+    subject: v.string(),
+    message: v.string(),
+    deliveryMethod: v.union(
+      v.literal("email"),
+      v.literal("letter"),
+      v.literal("portal"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const violation = await ctx.db.get(args.id);
+    if (!violation || violation.userId !== userId) throw new Error("Not found");
+
+    const nextStatus = args.template === "courtesy_warning"
+      ? "warning_sent"
+      : args.template === "fine_notice"
+        ? "fine_issued"
+        : "escalated";
+
+    await ctx.db.patch(args.id, {
+      status: violation.status === "resolved" ? violation.status : nextStatus,
+      noticeHistory: [
+        ...(violation.noticeHistory ?? []),
+        {
+          template: args.template,
+          subject: args.subject,
+          message: args.message,
+          sentAt: Date.now(),
+          deliveryMethod: args.deliveryMethod,
+        },
+      ],
+    });
   },
 });
 

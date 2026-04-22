@@ -18,6 +18,27 @@ import type { Id } from "../../convex/_generated/dataModel";
 
 import { FeatureGate } from "@/components/FeatureGate";
 
+const violationNoticeTemplateDefaults = {
+  courtesy_warning: {
+    subject: "Courtesy Warning",
+    message: "This is a courtesy reminder regarding a reported HOA violation. Please resolve the issue promptly.",
+  },
+  fine_notice: {
+    subject: "Fine Notice",
+    message: "This notice confirms a fine has been issued for an unresolved HOA violation. Please review the charge and remediation steps.",
+  },
+  hearing_notice: {
+    subject: "Hearing Notice",
+    message: "A board hearing has been scheduled regarding this HOA violation. Please review the matter and prepare any supporting information.",
+  },
+  final_notice: {
+    subject: "Final Notice",
+    message: "This is the final notice before escalation for the outstanding HOA violation. Immediate action is required.",
+  },
+} as const;
+
+type ViolationNoticeTemplate = keyof typeof violationNoticeTemplateDefaults;
+
 function HoaPageInner() {
   const properties = useQuery(api.properties.list) || [];
   const violations = useQuery(api.hoa.listViolations, {}) || [];
@@ -32,6 +53,7 @@ function HoaPageInner() {
 
   const createViolation = useMutation(api.hoa.createViolation);
   const updateViolation = useMutation(api.hoa.updateViolation);
+  const sendViolationNotice = useMutation(api.hoa.sendViolationNotice);
   const createDue = useMutation(api.hoa.createDue);
   const updateDue = useMutation(api.hoa.updateDue);
   const createVoteMut = useMutation(api.hoa.createVote);
@@ -47,6 +69,7 @@ function HoaPageInner() {
   const removeMsg = useMutation(api.hoa.removeMessage);
 
   const [activeDialog, setActiveDialog] = useState<string | null>(null);
+  const [selectedViolationId, setSelectedViolationId] = useState<Id<"hoaViolations"> | null>(null);
   const getPropertyName = (id: Id<"properties">) => properties.find((p) => p._id === id)?.name || "";
 
   // === VIOLATIONS ===
@@ -58,6 +81,29 @@ function HoaPageInner() {
       type: vForm.type, description: vForm.description, fineAmount: vForm.fineAmount ? parseFloat(vForm.fineAmount) : undefined,
     });
     toast.success("Violation reported"); setActiveDialog(null);
+  };
+
+  const [noticeForm, setNoticeForm] = useState({
+    template: "courtesy_warning" as ViolationNoticeTemplate,
+    deliveryMethod: "email" as const,
+    subject: "Courtesy Warning",
+    message: "This is a courtesy notice regarding a reported HOA violation. Please review and correct the issue promptly.",
+  });
+  const handleSendViolationNotice = async () => {
+    if (!selectedViolationId || !noticeForm.subject || !noticeForm.message) {
+      toast.error("Fill required fields");
+      return;
+    }
+    await sendViolationNotice({
+      id: selectedViolationId,
+      template: noticeForm.template,
+      deliveryMethod: noticeForm.deliveryMethod,
+      subject: noticeForm.subject,
+      message: noticeForm.message,
+    });
+    toast.success("Violation notice logged");
+    setActiveDialog(null);
+    setSelectedViolationId(null);
   };
 
   // === DUES ===
@@ -210,6 +256,22 @@ function HoaPageInner() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge className={violationStatusColors[v.status]}>{v.status.replace("_", " ")}</Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedViolationId(v._id);
+                      setNoticeForm({
+                        template: "courtesy_warning",
+                        deliveryMethod: "email",
+                        subject: `HOA Notice for Unit ${v.unit}`,
+                        message: `Hello ${v.residentName},\n\nThis notice concerns a ${v.type.replace(/_/g, " ")} violation reported for unit ${v.unit}. Please review the issue and respond or correct it as soon as possible.\n\nDetails: ${v.description}`,
+                      });
+                      setActiveDialog("violationNotice");
+                    }}
+                  >
+                    Send Notice
+                  </Button>
                   <Select value={v.status} onValueChange={(s: any) => updateViolation({ id: v._id, status: s }).then(() => toast.success("Updated"))}>
                     <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -219,6 +281,23 @@ function HoaPageInner() {
                     </SelectContent>
                   </Select>
                 </div>
+                {v.noticeHistory && v.noticeHistory.length > 0 && (
+                  <div className="mt-3 rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Notice History</p>
+                    <div className="space-y-2">
+                      {v.noticeHistory.slice().reverse().map((notice, index) => (
+                        <div key={`${notice.sentAt}-${index}`} className="rounded-md bg-background p-2 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium">{notice.template.replace(/_/g, " ")}</span>
+                            <span className="text-muted-foreground">{new Date(notice.sentAt).toLocaleString()} · {notice.deliveryMethod}</span>
+                          </div>
+                          <p className="mt-1 font-medium">{notice.subject}</p>
+                          <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{notice.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -556,6 +635,51 @@ function HoaPageInner() {
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setActiveDialog(null)}>Cancel</Button>
               <Button onClick={handleCreateViolation} className="bg-teal text-white hover:bg-teal/90">Report</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Violation Notice */}
+      <Dialog open={activeDialog === "violationNotice"} onOpenChange={() => { setActiveDialog(null); setSelectedViolationId(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Send HOA Violation Notice</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Template</Label>
+                <Select value={noticeForm.template} onValueChange={(value: ViolationNoticeTemplate) => {
+                  setNoticeForm({
+                    ...noticeForm,
+                    template: value,
+                    subject: violationNoticeTemplateDefaults[value].subject,
+                    message: violationNoticeTemplateDefaults[value].message,
+                  });
+                }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[
+                      "courtesy_warning",
+                      "fine_notice",
+                      "hearing_notice",
+                      "final_notice",
+                    ].map((template) => <SelectItem key={template} value={template}>{template.replace(/_/g, " ")}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Delivery</Label>
+                <Select value={noticeForm.deliveryMethod} onValueChange={(value: any) => setNoticeForm({ ...noticeForm, deliveryMethod: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["email", "letter", "portal"].map((method) => <SelectItem key={method} value={method}>{method}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div><Label>Subject</Label><Input value={noticeForm.subject} onChange={(e) => setNoticeForm({ ...noticeForm, subject: e.target.value })} /></div>
+            <div><Label>Message</Label><Textarea rows={6} value={noticeForm.message} onChange={(e) => setNoticeForm({ ...noticeForm, message: e.target.value })} /></div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => { setActiveDialog(null); setSelectedViolationId(null); }}>Cancel</Button>
+              <Button onClick={handleSendViolationNotice} className="bg-teal text-white hover:bg-teal/90">Log Notice</Button>
             </div>
           </div>
         </DialogContent>
