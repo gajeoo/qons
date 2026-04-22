@@ -106,11 +106,15 @@ function NavLink({
   if (locked) {
     return (
       <SidebarMenuItem>
-        <SidebarMenuButton asChild isActive={false} className="opacity-50 cursor-not-allowed">
-          <Link to={href} onClick={() => setOpenMobile(false)}>
-            <Icon />
-            <span className="flex-1">{label}</span>
-            <Lock className="size-3 text-muted-foreground" />
+        <SidebarMenuButton
+          asChild
+          isActive={false}
+          className="h-auto min-h-8 opacity-50 cursor-not-allowed"
+        >
+          <Link to={href} onClick={() => setOpenMobile(false)} className="w-full min-w-0">
+            <Icon className="shrink-0 self-start mt-0.5" />
+            <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">{label}</span>
+            <Lock className="size-3 text-muted-foreground shrink-0 self-start mt-0.5" />
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -119,10 +123,10 @@ function NavLink({
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={isActive}>
-        <Link to={href} onClick={() => setOpenMobile(false)}>
-          <Icon />
-          <span className="flex-1 truncate">{label}</span>
+      <SidebarMenuButton asChild isActive={isActive} className="h-auto min-h-8">
+        <Link to={href} onClick={() => setOpenMobile(false)} className="w-full min-w-0">
+          <Icon className="shrink-0 self-start mt-0.5" />
+          <span className="flex-1 min-w-0 whitespace-normal break-words leading-tight">{label}</span>
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
