@@ -15,6 +15,8 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
   "/tasks": "tasks",
   "/residents": "residents",
   "/map": "map",
+  "/pricing": "billing_management",
+  "/team": "team_management",
 };
 
 export const PLAN_LABELS: Record<string, string> = {
@@ -47,7 +49,9 @@ export function useFeatureAccess() {
 
   return {
     plan,
-    isLoading: plan === undefined,
+    // `null` means profile/access hasn't been established yet (e.g. first login).
+    // Keep loading state until we have a concrete plan object to avoid false redirects.
+    isLoading: plan === undefined || plan === null,
     hasAccess: plan?.hasAccess ?? false,
     isOnTrial: plan?.isOnTrial ?? false,
     trialDaysRemaining: plan?.trialDaysRemaining ?? 0,

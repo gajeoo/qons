@@ -67,6 +67,7 @@ const customerNavItems = [
   { href: "/hoa", label: "HOA Management", icon: Gavel, feature: "hoa" },
   { href: "/map", label: "Portfolio Map", icon: Map, feature: "map" },
   { href: "/team", label: "Team", icon: UsersRound, feature: "team_management" },
+  { href: "/pricing", label: "Billing & Plan", icon: CreditCard, feature: "billing_management" },
   { href: "/settings", label: "Settings", icon: Settings, feature: "dashboard" },
 ];
 

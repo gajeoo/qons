@@ -5,7 +5,7 @@ import { query } from "./_generated/server";
 /**
  * Single-tier plan: $49.99/mo with ALL features
  */
-const ALL_FEATURES = [
+const CORE_FEATURES = [
   "properties", "staff", "schedule", "time_tracking",
   "payroll_csv", "payroll_integrations", "basic_analytics",
   "executive_analytics", "amenities", "hoa", "dashboard",
@@ -13,13 +13,46 @@ const ALL_FEATURES = [
   "residents", "shift_swaps", "reserve_fund", "tasks", "map",
 ];
 
+// Extra controls reserved for the organization owner (primary account).
+const PRIMARY_ACCOUNT_FEATURES = [
+  "billing_management",
+  "subscription_control",
+  "team_invitations",
+  "member_permissions",
+  "organization_settings",
+  "advanced_exports",
+  "priority_support",
+];
+
+const PRIMARY_FEATURES = [...CORE_FEATURES, ...PRIMARY_ACCOUNT_FEATURES];
+
 const PLAN_FEATURES: Record<string, string[]> = {
-  starter: ALL_FEATURES,
-  pro: ALL_FEATURES,
-  enterprise: ALL_FEATURES,
-  trial: ALL_FEATURES,
-  admin: [...ALL_FEATURES, "admin_panel"],
+  starter: PRIMARY_FEATURES,
+  pro: PRIMARY_FEATURES,
+  enterprise: PRIMARY_FEATURES,
+  trial: PRIMARY_FEATURES,
+  admin: [...PRIMARY_FEATURES, "admin_panel"],
 };
+
+function defaultSubAccountFeatures(role: string): string[] {
+  if (role === "worker") {
+    return ["dashboard", "schedule", "time_tracking", "tasks"];
+  }
+
+  // Managers can run day-to-day operations, but owner-only controls remain restricted.
+  return [
+    "dashboard",
+    "properties",
+    "staff",
+    "residents",
+    "schedule",
+    "tasks",
+    "time_tracking",
+    "basic_analytics",
+    "map",
+    "team_management",
+  ];
+}
 
 /**
  * Get the effective plan for the current user
@@ -116,7 +149,9 @@ export const getEffectivePlan = query({
       !(sub.cancelAtPeriodEnd && sub.currentPeriodEnd <= now);
 
     if (hasPaidAccess) {
-      const features = applyMemberRestrictions(ALL_FEATURES);
+      const features = isSubAccount
+        ? applyMemberRestrictions(defaultSubAccountFeatures(profile.role))
+        : PRIMARY_FEATURES;
       return {
         plan: "premium",
         features,
@@ -144,7 +179,9 @@ export const getEffectivePlan = query({
     const trialEnd = trialProfile.trialEndDate || 0;
     if (trialEnd > now) {
       const daysRemaining = Math.ceil((trialEnd - now) / (24 * 60 * 60 * 1000));
-      const features = applyMemberRestrictions(ALL_FEATURES);
+      const features = isSubAccount
+        ? applyMemberRestrictions(defaultSubAccountFeatures(profile.role))
+        : PRIMARY_FEATURES;
       return {
         plan: "trial",
         features,
