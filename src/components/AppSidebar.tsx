@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Lock,
   LogOut,
+  Mail,
   Map,
   MessageSquare,
   Moon,
@@ -81,7 +82,7 @@ const workerNavItems = [
 
 const adminNavItems = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
-  { href: "/admin/leads", label: "Leads", icon: MessageSquare },
+  { href: "/admin/leads", label: "Leads", icon: Mail },
   { href: "/admin/chat", label: "Chat Management", icon: MessageSquare },
   { href: "/admin/subscribers", label: "Subscribers", icon: CreditCard },
   { href: "/admin/users", label: "Users", icon: UsersRound },
