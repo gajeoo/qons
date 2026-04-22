@@ -122,7 +122,7 @@ function NavLink({
       <SidebarMenuButton asChild isActive={isActive}>
         <Link to={href} onClick={() => setOpenMobile(false)}>
           <Icon />
-          <span>{label}</span>
+          <span className="flex-1 truncate">{label}</span>
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
