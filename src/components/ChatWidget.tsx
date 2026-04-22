@@ -25,6 +25,7 @@ function formatMessage(text: string): string {
 type ChatWidgetProps = {
   source?: "widget" | "dashboard";
   layout?: "floating" | "embedded";
+  embeddedStartsOpen?: boolean;
   title?: string;
   subtitle?: string;
   toggleLabel?: string;
@@ -39,6 +40,7 @@ type ChatWidgetProps = {
 export function ChatWidget({
   source = "widget",
   layout = "floating",
+  embeddedStartsOpen = false,
   title = "QuonsApp Assistant",
   subtitle = "Online — here to help",
   toggleLabel = "Chat with us",
@@ -49,7 +51,9 @@ export function ChatWidget({
   visitorEmail,
   metadata,
 }: ChatWidgetProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(
+    layout === "embedded" ? embeddedStartsOpen : false,
+  );
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<Id<"chatConversations"> | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -64,7 +68,7 @@ export function ChatWidget({
     api.chat.getMessages,
     conversationId ? { conversationId } : "skip",
   );
-  const shouldShowPanel = layout === "embedded" || isOpen;
+  const shouldShowPanel = isOpen;
 
   // Create conversation when widget opens
   useEffect(() => {
@@ -238,6 +242,25 @@ export function ChatWidget({
         >
           <MessageCircle className="size-5" />
           <span className="text-sm font-medium hidden sm:inline">{toggleLabel}</span>
+        </button>
+      )}
+
+      {layout === "embedded" && !isOpen && (
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className="w-full rounded-2xl border bg-background p-4 text-left shadow-sm transition-colors hover:bg-muted/30"
+        >
+          <div className="flex items-center gap-3">
+            <div className="size-9 rounded-full bg-sky-500/10 text-sky-600 flex items-center justify-center">
+              <MessageCircle className="size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{title}</p>
+              <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+            </div>
+            <span className="text-xs font-medium text-sky-600">Open</span>
+          </div>
         </button>
       )}
 

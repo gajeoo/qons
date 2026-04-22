@@ -2,7 +2,7 @@ import { useAction, useQuery } from "convex/react";
 import { useConvexAuth } from "convex/react";
 import { AlertTriangle, ArrowRight, Check, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { PayPalCheckoutButton } from "@/components/PayPalButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,10 +69,8 @@ export function PricingPage() {
     api.subscriptions.getMine,
     isAuthenticated ? {} : "skip",
   );
-  const { isSubAccount, isPaidSubscriber, isLoading: featureLoading } =
-    useFeatureAccess();
+  const { isSubAccount, isLoading: featureLoading } = useFeatureAccess();
   const checkPayPal = useAction(api.paypal.isConfigured);
-  const navigate = useNavigate();
   const [paypalClientId, setPaypalClientId] = useState<string | null>(
     import.meta.env.VITE_PAYPAL_CLIENT_ID || null,
   );
@@ -101,10 +99,6 @@ export function PricingPage() {
     !(subscription.cancelAtPeriodEnd && subscription.currentPeriodEnd <= now);
 
   if (isAuthenticated && !featureLoading && isSubAccount) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  if (isAuthenticated && !featureLoading && (isPaidSubscriber || hasActiveSub)) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -219,7 +213,9 @@ export function PricingPage() {
                       <PayPalCheckoutButton
                         billingCycle={billingCycle}
                         clientId={paypalClientId}
-                        onSuccess={() => navigate("/dashboard")}
+                        onSuccess={() => {
+                          window.location.assign("/settings");
+                        }}
                       />
                     </div>
                   ) : checkingPayPal ? (

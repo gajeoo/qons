@@ -134,15 +134,18 @@ async function tryCreateTaskFromAssistantMessage(
   }
 
   const trimmed = content.trim();
-  const lower = trimmed.toLowerCase();
-  if (!lower.startsWith("create task:")) {
+  const firstLine = trimmed.split(/\r?\n/, 1)[0] ?? "";
+  const createTaskMatch = firstLine.match(/^create\s+task\s*[:\-]?\s*(.*)$/i)
+    ?? firstLine.match(/^(?:please\s+)?(?:create|add)\s+(?:a\s+)?task(?:\s+(?:to|for))?\s*[:\-]?\s*(.*)$/i);
+
+  if (!createTaskMatch) {
     return null;
   }
 
   const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const title = lines[0].slice("create task:".length).trim();
+  const title = (createTaskMatch[1] ?? "").trim();
   if (!title) {
-    return "To create a task, use **Create task:** followed by the task title. Example: `Create task: Follow up on overdue HOA dues`. You can optionally add lines like `Priority: high`, `Due: 2026-04-25`, `Category: hoa`, or `Property: Sunset Towers`.";
+    return "To create a task, start your message with **Create task** and the task title. Example: `Create task: Follow up on overdue HOA dues`. You can optionally add lines like `Priority: high`, `Due: 2026-04-25`, `Category: hoa`, or `Property: Sunset Towers`.";
   }
 
   let description: string | undefined;
