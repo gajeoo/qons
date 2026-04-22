@@ -85,6 +85,52 @@ export const listDues = query({
   },
 });
 
+export const getDueSummary = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return {
+        totalPending: 0,
+        totalOverdue: 0,
+        totalCollected: 0,
+        pendingCount: 0,
+        overdueCount: 0,
+        collectedCount: 0,
+        overdueByProperty: [],
+      };
+    }
+
+    const dues = await ctx.db.query("hoaDues")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+
+    const overdueByPropertyMap = new Map<string, { propertyId: string; overdueAmount: number; overdueCount: number }>();
+
+    for (const due of dues) {
+      if (due.status !== "overdue") continue;
+      const current = overdueByPropertyMap.get(due.propertyId) ?? {
+        propertyId: due.propertyId,
+        overdueAmount: 0,
+        overdueCount: 0,
+      };
+      current.overdueAmount += due.amount;
+      current.overdueCount += 1;
+      overdueByPropertyMap.set(due.propertyId, current);
+    }
+
+    return {
+      totalPending: dues.filter((due) => due.status === "pending").reduce((sum, due) => sum + due.amount, 0),
+      totalOverdue: dues.filter((due) => due.status === "overdue").reduce((sum, due) => sum + due.amount, 0),
+      totalCollected: dues.filter((due) => due.status === "paid").reduce((sum, due) => sum + due.amount, 0),
+      pendingCount: dues.filter((due) => due.status === "pending").length,
+      overdueCount: dues.filter((due) => due.status === "overdue").length,
+      collectedCount: dues.filter((due) => due.status === "paid").length,
+      overdueByProperty: Array.from(overdueByPropertyMap.values()).sort((left, right) => right.overdueAmount - left.overdueAmount),
+    };
+  },
+});
+
 export const createDue = mutation({
   args: {
     propertyId: v.id("properties"),
@@ -190,6 +236,88 @@ export const closeVote = mutation({
     const vote = await ctx.db.get(args.id);
     if (!vote || vote.userId !== userId) throw new Error("Not found");
     await ctx.db.patch(args.id, { status: "closed" });
+  },
+});
+
+// ========== BOARD MEETINGS ==========
+export const listMeetings = query({
+  args: { propertyId: v.optional(v.id("properties")), status: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    let meetings;
+    if (args.propertyId) {
+      meetings = await ctx.db.query("hoaMeetings")
+        .withIndex("by_propertyId", (q) => q.eq("propertyId", args.propertyId!))
+        .collect();
+      meetings = meetings.filter((meeting) => meeting.userId === userId);
+    } else {
+      meetings = await ctx.db.query("hoaMeetings")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .collect();
+    }
+
+    if (args.status) {
+      meetings = meetings.filter((meeting) => meeting.status === args.status);
+    }
+
+    return meetings.sort((a, b) => {
+      const left = `${a.scheduledDate}|${a.scheduledTime ?? ""}`;
+      const right = `${b.scheduledDate}|${b.scheduledTime ?? ""}`;
+      return left.localeCompare(right);
+    });
+  },
+});
+
+export const createMeeting = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    scheduledDate: v.string(),
+    scheduledTime: v.optional(v.string()),
+    location: v.optional(v.string()),
+    agenda: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    return await ctx.db.insert("hoaMeetings", {
+      ...args,
+      userId,
+      status: "scheduled",
+    });
+  },
+});
+
+export const updateMeeting = mutation({
+  args: {
+    id: v.id("hoaMeetings"),
+    status: v.optional(v.union(
+      v.literal("scheduled"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+    )),
+    minutes: v.optional(v.string()),
+    attendeeCount: v.optional(v.number()),
+    followUpActions: v.optional(v.array(v.string())),
+    location: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const meeting = await ctx.db.get(args.id);
+    if (!meeting || meeting.userId !== userId) throw new Error("Not found");
+
+    const { id, ...updates } = args;
+    const filtered = Object.fromEntries(
+      Object.entries(updates).filter(([, val]) => val !== undefined),
+    );
+    await ctx.db.patch(args.id, filtered);
   },
 });
 

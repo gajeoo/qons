@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "convex/react";
 import {
-  AlertTriangle, BadgeDollarSign, FileText, Landmark, Megaphone, MessageSquare, Plus, PlusCircle, Vote,
+  AlertTriangle, BadgeDollarSign, CalendarDays, FileText, Landmark, Megaphone, MessageSquare, Plus, PlusCircle, Vote,
 } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,9 @@ function HoaPageInner() {
   const properties = useQuery(api.properties.list) || [];
   const violations = useQuery(api.hoa.listViolations, {}) || [];
   const dues = useQuery(api.hoa.listDues, {}) || [];
+  const dueSummary = useQuery(api.hoa.getDueSummary);
   const votes = useQuery(api.hoa.listVotes, {}) || [];
+  const meetings = useQuery(api.hoa.listMeetings, {}) || [];
   const arcRequests = useQuery(api.hoa.listArcRequests, {}) || [];
   const messages = useQuery(api.hoa.listMessages, {}) || [];
   const reserveFunds = useQuery(api.reserveFund.list, {}) || [];
@@ -34,6 +36,8 @@ function HoaPageInner() {
   const updateDue = useMutation(api.hoa.updateDue);
   const createVoteMut = useMutation(api.hoa.createVote);
   const closeVoteMut = useMutation(api.hoa.closeVote);
+  const createMeetingMut = useMutation(api.hoa.createMeeting);
+  const updateMeetingMut = useMutation(api.hoa.updateMeeting);
   const createArcReq = useMutation(api.hoa.createArcRequest);
   const createReserveFund = useMutation(api.reserveFund.create);
   const addContribution = useMutation(api.reserveFund.addContribution);
@@ -76,6 +80,34 @@ function HoaPageInner() {
       options: votForm.options.split(",").map((o) => o.trim()).filter(Boolean), deadline: votForm.deadline,
     });
     toast.success("Vote created"); setActiveDialog(null);
+  };
+
+  // === MEETINGS ===
+  const [meetingForm, setMeetingForm] = useState({
+    propertyId: "",
+    title: "",
+    description: "",
+    scheduledDate: "",
+    scheduledTime: "",
+    location: "",
+    agenda: "Budget review, Vendor updates",
+  });
+  const handleCreateMeeting = async () => {
+    if (!meetingForm.propertyId || !meetingForm.title || !meetingForm.scheduledDate) {
+      toast.error("Fill required fields");
+      return;
+    }
+    await createMeetingMut({
+      propertyId: meetingForm.propertyId as Id<"properties">,
+      title: meetingForm.title,
+      description: meetingForm.description || undefined,
+      scheduledDate: meetingForm.scheduledDate,
+      scheduledTime: meetingForm.scheduledTime || undefined,
+      location: meetingForm.location || undefined,
+      agenda: meetingForm.agenda.split(",").map((item) => item.trim()).filter(Boolean),
+    });
+    toast.success("Meeting scheduled");
+    setActiveDialog(null);
   };
 
   // === ARC ===
@@ -135,6 +167,7 @@ function HoaPageInner() {
           { label: "Violations", value: violations.filter((v) => v.status !== "resolved").length, icon: AlertTriangle, color: "text-red-500" },
           { label: "Pending Dues", value: dues.filter((d) => d.status === "pending" || d.status === "overdue").length, icon: BadgeDollarSign, color: "text-amber-500" },
           { label: "Active Votes", value: votes.filter((v) => v.status === "open").length, icon: Vote, color: "text-blue-500" },
+          { label: "Meetings", value: meetings.filter((m) => m.status !== "cancelled").length, icon: CalendarDays, color: "text-sky-500" },
           { label: "ARC Requests", value: arcRequests.filter((r) => r.status === "submitted" || r.status === "under_review").length, icon: FileText, color: "text-purple-500" },
           { label: "Messages", value: messages.length, icon: MessageSquare, color: "text-teal" },
         ].map((s) => (
@@ -155,6 +188,7 @@ function HoaPageInner() {
           <TabsTrigger value="violations"><AlertTriangle className="size-3" /> Violations</TabsTrigger>
           <TabsTrigger value="dues"><BadgeDollarSign className="size-3" /> Dues</TabsTrigger>
           <TabsTrigger value="votes"><Vote className="size-3" /> Voting</TabsTrigger>
+          <TabsTrigger value="meetings"><CalendarDays className="size-3" /> Meetings</TabsTrigger>
           <TabsTrigger value="arc"><FileText className="size-3" /> ARC</TabsTrigger>
           <TabsTrigger value="messages"><Megaphone className="size-3" /> Messages</TabsTrigger>
           <TabsTrigger value="reserves"><Landmark className="size-3" /> Reserve Funds</TabsTrigger>
@@ -193,6 +227,35 @@ function HoaPageInner() {
         {/* DUES */}
         <TabsContent value="dues" className="mt-4 space-y-3">
           <Button onClick={() => setActiveDialog("due")} className="bg-teal text-white hover:bg-teal/90" size="sm"><Plus className="size-4" /> Create Due</Button>
+          {dueSummary && (
+            <div className="grid gap-3 md:grid-cols-4">
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Pending</p><p className="text-xl font-bold text-amber-600">${(dueSummary.totalPending / 100).toLocaleString()}</p><p className="text-xs text-muted-foreground">{dueSummary.pendingCount} invoice(s)</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Overdue</p><p className="text-xl font-bold text-red-600">${(dueSummary.totalOverdue / 100).toLocaleString()}</p><p className="text-xs text-muted-foreground">{dueSummary.overdueCount} account(s)</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Collected</p><p className="text-xl font-bold text-green-600">${(dueSummary.totalCollected / 100).toLocaleString()}</p><p className="text-xs text-muted-foreground">{dueSummary.collectedCount} payment(s)</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Collection Rate</p><p className="text-xl font-bold text-blue-600">{dueSummary.totalCollected + dueSummary.totalPending + dueSummary.totalOverdue > 0 ? Math.round((dueSummary.totalCollected / (dueSummary.totalCollected + dueSummary.totalPending + dueSummary.totalOverdue)) * 100) : 0}%</p><p className="text-xs text-muted-foreground">paid vs open balances</p></CardContent></Card>
+            </div>
+          )}
+          {dueSummary && dueSummary.overdueByProperty.length > 0 && (
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div>
+                  <p className="font-medium">Overdue by Property</p>
+                  <p className="text-xs text-muted-foreground">Identify communities with the highest outstanding HOA balances</p>
+                </div>
+                <div className="space-y-2">
+                  {dueSummary.overdueByProperty.slice(0, 5).map((item) => (
+                    <div key={item.propertyId} className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <p className="text-sm font-medium">{getPropertyName(item.propertyId as Id<"properties">)}</p>
+                        <p className="text-xs text-muted-foreground">{item.overdueCount} overdue account(s)</p>
+                      </div>
+                      <p className="text-sm font-semibold text-red-600">${(item.overdueAmount / 100).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
           {dues.length === 0 ? (
             <Card><CardContent className="p-8 text-center text-muted-foreground">No dues created</CardContent></Card>
           ) : dues.map((d) => (
@@ -256,6 +319,94 @@ function HoaPageInner() {
               </CardContent>
             </Card>
           ))}
+        </TabsContent>
+
+        {/* MEETINGS */}
+        <TabsContent value="meetings" className="mt-4 space-y-3">
+          <Button onClick={() => setActiveDialog("meeting")} className="bg-teal text-white hover:bg-teal/90" size="sm"><Plus className="size-4" /> Schedule Meeting</Button>
+          {meetings.length === 0 ? (
+            <Card><CardContent className="p-8 text-center text-muted-foreground">No board meetings scheduled</CardContent></Card>
+          ) : meetings.map((meeting) => {
+            const meetingStatusColors: Record<string, string> = {
+              scheduled: "bg-blue-100 text-blue-700",
+              in_progress: "bg-amber-100 text-amber-700",
+              completed: "bg-green-100 text-green-700",
+              cancelled: "bg-gray-100 text-gray-600",
+            };
+
+            return (
+              <Card key={meeting._id}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{meeting.title}</p>
+                      <p className="text-sm text-muted-foreground">{getPropertyName(meeting.propertyId)} · {meeting.scheduledDate}{meeting.scheduledTime ? ` at ${meeting.scheduledTime}` : ""}{meeting.location ? ` · ${meeting.location}` : ""}</p>
+                      {meeting.description && <p className="text-sm mt-1">{meeting.description}</p>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={meetingStatusColors[meeting.status]}>{meeting.status.replace("_", " ")}</Badge>
+                      <Select value={meeting.status} onValueChange={(status: any) => updateMeetingMut({ id: meeting._id, status }).then(() => toast.success("Meeting updated"))}>
+                        <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[
+                            "scheduled",
+                            "in_progress",
+                            "completed",
+                            "cancelled",
+                          ].map((status) => (
+                            <SelectItem key={status} value={status}>{status.replace("_", " ")}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Agenda</p>
+                    <div className="flex flex-wrap gap-2">
+                      {meeting.agenda.map((item) => (
+                        <Badge key={item} variant="outline">{item}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Attendees</Label>
+                      <Input
+                        type="number"
+                        defaultValue={meeting.attendeeCount ?? ""}
+                        placeholder="0"
+                        onBlur={(e) => {
+                          const value = e.target.value.trim();
+                          if (!value) return;
+                          updateMeetingMut({ id: meeting._id, attendeeCount: Number(value) }).then(() => toast.success("Attendees updated"));
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Follow-up Actions</Label>
+                      <Input
+                        defaultValue={meeting.followUpActions?.join(", ") ?? ""}
+                        placeholder="Assign landscaping bid, Draft resident notice"
+                        onBlur={(e) => updateMeetingMut({
+                          id: meeting._id,
+                          followUpActions: e.target.value.split(",").map((item) => item.trim()).filter(Boolean),
+                        }).then(() => toast.success("Actions updated"))}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Meeting Minutes</Label>
+                    <Textarea
+                      defaultValue={meeting.minutes ?? ""}
+                      placeholder="Summarize decisions, motions, vendors, and next steps"
+                      rows={3}
+                      onBlur={(e) => updateMeetingMut({ id: meeting._id, minutes: e.target.value || undefined }).then(() => toast.success("Minutes saved"))}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </TabsContent>
 
         {/* ARC REQUESTS */}
@@ -446,6 +597,28 @@ function HoaPageInner() {
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setActiveDialog(null)}>Cancel</Button>
               <Button onClick={handleCreateVote} className="bg-teal text-white hover:bg-teal/90">Create Vote</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Meeting */}
+      <Dialog open={activeDialog === "meeting"} onOpenChange={() => setActiveDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Schedule Board Meeting</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Property *</Label><PropertySelect value={meetingForm.propertyId} onChange={(v) => setMeetingForm({ ...meetingForm, propertyId: v })} /></div>
+            <div><Label>Meeting Title *</Label><Input value={meetingForm.title} onChange={(e) => setMeetingForm({ ...meetingForm, title: e.target.value })} placeholder="Quarterly board review" /></div>
+            <div><Label>Description</Label><Textarea value={meetingForm.description} onChange={(e) => setMeetingForm({ ...meetingForm, description: e.target.value })} rows={3} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Date *</Label><Input type="date" value={meetingForm.scheduledDate} onChange={(e) => setMeetingForm({ ...meetingForm, scheduledDate: e.target.value })} /></div>
+              <div><Label>Time</Label><Input type="time" value={meetingForm.scheduledTime} onChange={(e) => setMeetingForm({ ...meetingForm, scheduledTime: e.target.value })} /></div>
+            </div>
+            <div><Label>Location</Label><Input value={meetingForm.location} onChange={(e) => setMeetingForm({ ...meetingForm, location: e.target.value })} placeholder="Clubhouse conference room" /></div>
+            <div><Label>Agenda Items</Label><Input value={meetingForm.agenda} onChange={(e) => setMeetingForm({ ...meetingForm, agenda: e.target.value })} placeholder="Budget review, Vendor selection, Resident appeals" /></div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setActiveDialog(null)}>Cancel</Button>
+              <Button onClick={handleCreateMeeting} className="bg-teal text-white hover:bg-teal/90">Schedule</Button>
             </div>
           </div>
         </DialogContent>

@@ -435,6 +435,29 @@ const schema = defineSchema({
     .index("by_propertyId", ["propertyId"])
     .index("by_status", ["status"]),
 
+  hoaMeetings: defineTable({
+    userId: v.id("users"),
+    propertyId: v.id("properties"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    scheduledDate: v.string(),
+    scheduledTime: v.optional(v.string()),
+    location: v.optional(v.string()),
+    agenda: v.array(v.string()),
+    status: v.union(
+      v.literal("scheduled"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+    ),
+    attendeeCount: v.optional(v.number()),
+    minutes: v.optional(v.string()),
+    followUpActions: v.optional(v.array(v.string())),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_propertyId", ["propertyId"])
+    .index("by_status", ["status"]),
+
   arcRequests: defineTable({
     userId: v.id("users"),
     propertyId: v.id("properties"),
