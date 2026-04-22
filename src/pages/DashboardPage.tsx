@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
+import { ChatWidget } from "@/components/ChatWidget";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -267,6 +268,39 @@ export function DashboardPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {!isWorker && !isSubAccount && user?._id && (
+        <Card className="overflow-hidden border-sky-200/70 bg-gradient-to-br from-sky-50/80 via-background to-blue-50/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="size-5 text-sky-600" />
+              AI Operations Assistant
+            </CardTitle>
+            <CardDescription>
+              Your personal QuonsApp assistant for planning work, answering product questions, suggesting automations, and guiding scheduling or HOA operations.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChatWidget
+              layout="embedded"
+              source="dashboard"
+              title="Personal Operations Assistant"
+              subtitle="Ready to help with scheduling, tasks, automation, and questions"
+              inputPlaceholder="Ask about scheduling, tasks, automation, HOA, staffing..."
+              visitorId={`user_${user._id}`}
+              visitorName={user.name ?? undefined}
+              visitorEmail={user.email ?? undefined}
+              metadata={JSON.stringify({ page: "dashboard" })}
+              suggestedPrompts={[
+                "Help me plan next week's schedule",
+                "What should I automate first?",
+                "Create a task checklist for a new property",
+                "How do I handle overdue HOA dues?",
+              ]}
+            />
+          </CardContent>
+        </Card>
       )}
 
       {/* Worker: Quick Links (simplified) */}

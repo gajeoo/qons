@@ -14,9 +14,11 @@ export const getOrCreateConversation = mutation({
     visitorId: v.string(),
     visitorName: v.optional(v.string()),
     visitorEmail: v.optional(v.string()),
+    source: v.optional(v.union(v.literal("widget"), v.literal("dashboard"))),
+    metadata: v.optional(v.string()),
   },
   returns: v.id("chatConversations"),
-  handler: async (ctx, { visitorId, visitorName, visitorEmail }) => {
+  handler: async (ctx, { visitorId, visitorName, visitorEmail, source, metadata }) => {
     // Check for existing active conversation
     const existing = await ctx.db
       .query("chatConversations")
@@ -43,7 +45,8 @@ export const getOrCreateConversation = mutation({
       status: "active",
       lastMessageAt: Date.now(),
       unreadByAdmin: 0,
-      source: "widget",
+      source: source ?? "widget",
+      metadata,
     });
 
     // Add welcome message
@@ -51,7 +54,9 @@ export const getOrCreateConversation = mutation({
       conversationId,
       role: "ai",
       content:
-        "Hi there! 👋 Welcome to QuonsApp. I'm your AI assistant. I can help you learn about our premium real estate management platform, pricing, features, or anything else. How can I help you today?",
+        source === "dashboard"
+          ? "Hi! I'm your QuonsApp assistant. I can help you plan work, answer product questions, suggest automations, and guide scheduling, HOA, staffing, or operational next steps. What do you want to work on?"
+          : "Hi there! 👋 Welcome to QuonsApp. I'm your AI assistant. I can help you learn about our premium real estate management platform, pricing, features, or anything else. How can I help you today?",
     });
 
     return conversationId;
