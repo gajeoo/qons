@@ -131,6 +131,30 @@ const pricingFeatures = [
   "AI chat widget + admin inbox",
 ];
 
+const caseStudies = [
+  {
+    title: "UrbanCore PM Group",
+    result: "Reduced scheduling overhead by 82%",
+    detail: "Automations + AI assistant cut weekly manual scheduling from 22 hours to 4 hours across 38 properties.",
+  },
+  {
+    title: "Seabreeze HOA Management",
+    result: "Board response time improved 3.4x",
+    detail: "Centralized violations, votes, and resident messaging in one portal with audit-ready reporting.",
+  },
+  {
+    title: "Northline Residential",
+    result: "NOI visibility at property level",
+    detail: "Tracked rent revenue, expenses, and NOI by property to prioritize maintenance and leasing decisions.",
+  },
+];
+
+const productScreenshots = [
+  { title: "Operations Dashboard", caption: "Portfolio-wide KPIs and staffing in one view" },
+  { title: "Lease & Renewal Workflow", caption: "Document storage, signature states, and renewal tracking" },
+  { title: "Property Financials", caption: "Revenue, expense, and NOI comparisons by building" },
+];
+
 export function LandingPage() {
   const { isAuthenticated } = useConvexAuth();
 
@@ -385,6 +409,60 @@ export function LandingPage() {
       </section>
 
       {/* ===== FINAL CTA ===== */}
+      <section className="py-20 sm:py-28 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">Customer Case Studies</h2>
+            <p className="mt-3 text-muted-foreground">Proof points from teams using QonsApp in real operations.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {caseStudies.map((study) => (
+              <div key={study.title} className="rounded-2xl border p-6 bg-slate-50/70 dark:bg-slate-900/40">
+                <p className="text-sm text-muted-foreground">{study.title}</p>
+                <p className="text-lg font-semibold mt-1">{study.result}</p>
+                <p className="text-sm mt-3 text-muted-foreground leading-relaxed">{study.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20 sm:py-28 bg-slate-50 dark:bg-slate-900/40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">Product Screenshots</h2>
+            <p className="mt-3 text-muted-foreground">What teams see every day inside the platform.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {productScreenshots.map((shot) => (
+              <div key={shot.title} className="rounded-2xl border bg-white dark:bg-slate-900 p-4">
+                <div className="aspect-[16/10] rounded-xl bg-gradient-to-br from-slate-200 to-slate-100 dark:from-slate-800 dark:to-slate-700 border" />
+                <p className="font-medium mt-4">{shot.title}</p>
+                <p className="text-xs text-muted-foreground mt-1">{shot.caption}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20 sm:py-28 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">Video Demo</h2>
+            <p className="mt-3 text-muted-foreground">Walk through the workflow from onboarding to financial reporting.</p>
+          </div>
+          <div className="rounded-2xl overflow-hidden border shadow-lg bg-black">
+            <iframe
+              title="QonsApp Product Demo"
+              className="w-full aspect-video"
+              src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      </section>
+
       <section className="relative py-20 sm:py-28 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-sky-600 via-blue-600 to-violet-600" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.1),transparent_70%)]" />

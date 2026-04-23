@@ -38,6 +38,7 @@ function PropertiesPageInner() {
   const properties = useQuery(api.properties.list) || [];
   const stats = useQuery(api.properties.getStats);
   const importHistory = useQuery(api.imports.listHistory) || [];
+  const financials = useQuery(api.analytics.getPropertyFinancials) || [];
   const create = useMutation(api.properties.create);
   const update = useMutation(api.properties.update);
   const remove = useMutation(api.properties.remove);
@@ -62,6 +63,10 @@ function PropertiesPageInner() {
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.address.toLowerCase().includes(search.toLowerCase()) ||
     p.city.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const financialMap = Object.fromEntries(
+    financials.map((f: any) => [f.propertyId, f]),
   );
 
   const openCreate = () => { setForm(emptyForm); setEditingId(null); setShowForm(true); };
@@ -253,6 +258,11 @@ function PropertiesPageInner() {
                 <div className="text-sm text-muted-foreground space-y-1">
                   <p>{p.address}</p>
                   <p className="font-medium text-foreground">{p.units} units</p>
+                  {financialMap[p._id] ? (
+                    <p>
+                      Revenue: ${financialMap[p._id].revenue.toLocaleString()} • Expenses: ${financialMap[p._id].expenses.toLocaleString()} • NOI: ${financialMap[p._id].noi.toLocaleString()}
+                    </p>
+                  ) : null}
                   {p.contactName && <p>Contact: {p.contactName}</p>}
                 </div>
               </CardContent>

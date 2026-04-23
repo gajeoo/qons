@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { api, internal } from "./_generated/api";
+import { action, internalMutation, mutation, query } from "./_generated/server";
 
 // ========== ASSISTANT CONVERSATION STORE ==========
 
@@ -519,5 +520,125 @@ export const sendMessage = mutation({
     });
 
     return { response, actionTaken };
+  },
+});
+
+export const storeMessage = internalMutation({
+  args: {
+    userId: v.id("users"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    actionTaken: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.insert("aiAssistantMessages", {
+      userId: args.userId,
+      role: args.role,
+      content: args.content,
+      timestamp: Date.now(),
+      actionTaken: args.actionTaken,
+    });
+    return null;
+  },
+});
+
+export const sendMessageLLM = action({
+  args: { content: v.string() },
+  returns: v.object({
+    response: v.string(),
+    actionTaken: v.string(),
+    provider: v.string(),
+  }),
+  handler: async (ctx, { content }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const env = (globalThis as any).process?.env || {};
+    const apiKey = env.OPENAI_API_KEY;
+    const model = env.OPENAI_MODEL || "gpt-4o-mini";
+
+    // Fallback to existing rules engine if key is not configured.
+    if (!apiKey) {
+      const fallback: any = await ctx.runMutation(api.aiAssistant.sendMessage, {
+        content,
+      });
+      return {
+        response: fallback?.response || "I could not process that request.",
+        actionTaken: fallback?.actionTaken || "fallback",
+        provider: "rules",
+      };
+    }
+
+    await ctx.runMutation(internal.aiAssistant.storeMessage, {
+      userId,
+      role: "user",
+      content,
+    });
+
+    const history = (await ctx.runQuery(api.aiAssistant.getConversation, {})) || [];
+    const properties = await ctx.runQuery(api.properties.list, {});
+    const tasks = await ctx.runQuery(api.tasks.list, {});
+    const residents = await ctx.runQuery(api.residents.list, { propertyId: undefined });
+
+    const systemPrompt = [
+      "You are Qons AI Assistant for property managers.",
+      "Be concise, action-oriented, and practical.",
+      "Use markdown bullets for recommendations.",
+      `Context: ${properties.length} properties, ${tasks.length} tasks, ${residents.length} residents.`,
+      "If asked to create/update records, provide safe next steps and ask for missing fields.",
+    ].join(" ");
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      ...history.slice(-16).map((m: any) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.content,
+      })),
+      { role: "user", content },
+    ];
+
+    let response = "I could not generate a response right now.";
+    try {
+      const llmRes = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          messages,
+        }),
+      });
+
+      const llmJson: any = await llmRes.json();
+      response =
+        llmJson?.choices?.[0]?.message?.content?.trim() ||
+        "I could not generate a response right now.";
+    } catch {
+      const fallback: any = await ctx.runMutation(api.aiAssistant.sendMessage, {
+        content,
+      });
+      return {
+        response: fallback?.response || "I could not process that request.",
+        actionTaken: fallback?.actionTaken || "fallback",
+        provider: "rules",
+      };
+    }
+
+    await ctx.runMutation(internal.aiAssistant.storeMessage, {
+      userId,
+      role: "assistant",
+      content: response,
+      actionTaken: "llm_response",
+    });
+
+    return {
+      response,
+      actionTaken: "llm_response",
+      provider: "openai",
+    };
   },
 });

@@ -325,3 +325,155 @@ export const markIntegrationSync = mutation({
     return { success: true };
   },
 });
+
+export const generateLeaseDocumentUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    await requireUserId(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const addLeaseDocument = mutation({
+  args: {
+    leaseId: v.id("leaseAgreements"),
+    fileName: v.string(),
+    storageId: v.id("_storage"),
+  },
+  returns: v.id("leaseDocuments"),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const lease: any = await ctx.db.get(args.leaseId);
+    if (!lease || lease.userId !== userId) throw new Error("Lease not found");
+
+    return await ctx.db.insert("leaseDocuments", {
+      userId,
+      leaseId: args.leaseId,
+      fileName: args.fileName,
+      storageId: args.storageId,
+      uploadedAt: Date.now(),
+    });
+  },
+});
+
+export const listLeaseDocuments = query({
+  args: { leaseId: v.id("leaseAgreements") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    const docs = await ctx.db
+      .query("leaseDocuments")
+      .withIndex("by_leaseId", (q: any) => q.eq("leaseId", args.leaseId))
+      .order("desc")
+      .take(100);
+
+    return await Promise.all(
+      docs
+        .filter((d: any) => d.userId === userId)
+        .map(async (doc: any) => ({
+          ...doc,
+          fileUrl: await ctx.storage.getUrl(doc.storageId),
+        })),
+    );
+  },
+});
+
+export const requestLeaseRenewal = mutation({
+  args: {
+    leaseId: v.id("leaseAgreements"),
+    proposedEndDate: v.string(),
+    proposedRentCents: v.optional(v.number()),
+    notes: v.optional(v.string()),
+  },
+  returns: v.id("leaseRenewals"),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const lease: any = await ctx.db.get(args.leaseId);
+    if (!lease || lease.userId !== userId) throw new Error("Lease not found");
+
+    return await ctx.db.insert("leaseRenewals", {
+      userId,
+      leaseId: args.leaseId,
+      currentEndDate: lease.endDate,
+      proposedEndDate: args.proposedEndDate,
+      proposedRentCents: args.proposedRentCents,
+      status: "sent",
+      notes: args.notes,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const listLeaseRenewals = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    return await ctx.db
+      .query("leaseRenewals")
+      .withIndex("by_userId", (q: any) => q.eq("userId", userId))
+      .order("desc")
+      .take(200);
+  },
+});
+
+export const updateLeaseRenewalStatus = mutation({
+  args: {
+    renewalId: v.id("leaseRenewals"),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("sent"),
+      v.literal("approved"),
+      v.literal("declined"),
+      v.literal("expired"),
+    ),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const renewal: any = await ctx.db.get(args.renewalId);
+    if (!renewal || renewal.userId !== userId) throw new Error("Renewal not found");
+
+    await ctx.db.patch(args.renewalId, {
+      status: args.status,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const listTenantPortalAnnouncements = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    return await ctx.db
+      .query("tenantPortalAnnouncements")
+      .withIndex("by_userId", (q: any) => q.eq("userId", userId))
+      .order("desc")
+      .take(100);
+  },
+});
+
+export const createTenantPortalAnnouncement = mutation({
+  args: {
+    title: v.string(),
+    body: v.string(),
+    audience: v.union(v.literal("all"), v.literal("active"), v.literal("pending")),
+  },
+  returns: v.id("tenantPortalAnnouncements"),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    return await ctx.db.insert("tenantPortalAnnouncements", {
+      userId,
+      title: args.title,
+      body: args.body,
+      audience: args.audience,
+      createdAt: Date.now(),
+      publishedAt: Date.now(),
+    });
+  },
+});

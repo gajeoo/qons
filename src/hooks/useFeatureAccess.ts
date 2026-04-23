@@ -16,6 +16,7 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
   "/accounting": "dashboard",
   "/rent-collection": "dashboard",
   "/tenant-screening": "dashboard",
+  "/tenant-portal": "dashboard",
   "/leases": "dashboard",
   "/integrations": "dashboard",
   "/residents": "residents",

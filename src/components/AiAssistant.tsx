@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   Bot,
   Maximize2,
@@ -38,7 +38,7 @@ export function AiAssistant() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const messages = useQuery(api.aiAssistant.getConversation) || [];
-  const sendMessage = useMutation(api.aiAssistant.sendMessage);
+  const sendMessage = useAction(api.aiAssistant.sendMessageLLM);
   const clearConversation = useMutation(api.aiAssistant.clearConversation);
 
   useEffect(() => {

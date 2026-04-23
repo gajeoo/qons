@@ -893,6 +893,49 @@ const schema = defineSchema({
     .index("by_userId_endDate", ["userId", "endDate"])
     .index("by_userId_residentId", ["userId", "residentId"]),
 
+  leaseDocuments: defineTable({
+    userId: v.id("users"),
+    leaseId: v.id("leaseAgreements"),
+    fileName: v.string(),
+    storageId: v.id("_storage"),
+    uploadedAt: v.number(),
+    uploadedBy: v.optional(v.string()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_leaseId", ["leaseId"]),
+
+  leaseRenewals: defineTable({
+    userId: v.id("users"),
+    leaseId: v.id("leaseAgreements"),
+    currentEndDate: v.string(),
+    proposedEndDate: v.string(),
+    proposedRentCents: v.optional(v.number()),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("sent"),
+      v.literal("approved"),
+      v.literal("declined"),
+      v.literal("expired"),
+    ),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_leaseId", ["leaseId"])
+    .index("by_userId_status", ["userId", "status"]),
+
+  tenantPortalAnnouncements: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    body: v.string(),
+    audience: v.union(v.literal("all"), v.literal("active"), v.literal("pending")),
+    createdAt: v.number(),
+    publishedAt: v.optional(v.number()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_createdAt", ["userId", "createdAt"]),
+
   // ========== PMS INTEGRATIONS ==========
   integrationConnections: defineTable({
     userId: v.id("users"),

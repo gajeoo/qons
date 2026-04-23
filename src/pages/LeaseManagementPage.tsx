@@ -19,6 +19,16 @@ export function LeaseManagementPage() {
   const properties = useQuery(api.properties.list) || [];
   const createLease = useMutation(api.operations.createLeaseAgreement);
   const updateStatus = useMutation(api.operations.updateLeaseStatus);
+  const renewals = useQuery(api.operations.listLeaseRenewals) || [];
+  const requestRenewal = useMutation(api.operations.requestLeaseRenewal);
+  const updateRenewalStatus = useMutation(api.operations.updateLeaseRenewalStatus);
+  const generateUploadUrl = useMutation(api.operations.generateLeaseDocumentUploadUrl);
+  const addLeaseDocument = useMutation(api.operations.addLeaseDocument);
+  const [selectedLeaseId, setSelectedLeaseId] = useState<Id<"leaseAgreements"> | null>(null);
+  const documents = useQuery(
+    api.operations.listLeaseDocuments,
+    selectedLeaseId ? { leaseId: selectedLeaseId } : "skip",
+  ) || [];
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     residentId: "",
@@ -81,6 +91,65 @@ export function LeaseManagementPage() {
                 <Button size="sm" variant="outline" onClick={() => updateStatus({ leaseId: lease._id, status: "sent" }).then(() => toast.success("Marked sent"))}>Sent</Button>
                 <Button size="sm" variant="outline" onClick={() => updateStatus({ leaseId: lease._id, status: "signed" }).then(() => toast.success("Marked signed"))}>Signed</Button>
                 <Button size="sm" variant="outline" onClick={() => updateStatus({ leaseId: lease._id, status: "active" }).then(() => toast.success("Marked active"))}>Active</Button>
+                <Button size="sm" variant="outline" onClick={() => requestRenewal({ leaseId: lease._id, proposedEndDate: new Date(new Date(lease.endDate).getTime() + 31536000000).toISOString().slice(0, 10), proposedRentCents: lease.rentCents }).then(() => toast.success("Renewal sent"))}>Send Renewal</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = ".pdf,.doc,.docx";
+                    input.onchange = async () => {
+                      const file = input.files?.[0];
+                      if (!file) return;
+                      const uploadUrl = await generateUploadUrl({});
+                      const res = await fetch(uploadUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": file.type || "application/octet-stream" },
+                        body: file,
+                      });
+                      const body = await res.json();
+                      await addLeaseDocument({
+                        leaseId: lease._id,
+                        fileName: file.name,
+                        storageId: body.storageId,
+                      });
+                      setSelectedLeaseId(lease._id);
+                      toast.success("Lease document uploaded");
+                    };
+                    input.click();
+                  }}
+                >
+                  Upload Document
+                </Button>
+              </div>
+              {selectedLeaseId === lease._id && documents.length > 0 ? (
+                <div className="mt-3 space-y-1">
+                  {documents.map((doc) => (
+                    <a key={doc._id} href={doc.fileUrl || "#"} target="_blank" rel="noreferrer" className="block text-xs text-blue-600 underline">
+                      {doc.fileName}
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Renewal Workflow</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {renewals.length === 0 ? <p className="text-sm text-muted-foreground">No lease renewals yet.</p> : null}
+          {renewals.map((renewal) => (
+            <div key={renewal._id} className="rounded-md border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium">{renewal.currentEndDate} → {renewal.proposedEndDate}</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{renewal.status}</p>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => updateRenewalStatus({ renewalId: renewal._id, status: "approved" }).then(() => toast.success("Renewal approved"))}>Approve</Button>
+                <Button size="sm" variant="outline" onClick={() => updateRenewalStatus({ renewalId: renewal._id, status: "declined" }).then(() => toast.success("Renewal declined"))}>Decline</Button>
               </div>
             </div>
           ))}
