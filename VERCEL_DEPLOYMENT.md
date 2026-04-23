@@ -25,6 +25,7 @@ Optional frontend variables:
 - `VITE_STRIPE_PUBLISHABLE_KEY`
 - `VITE_PAYPAL_CLIENT_ID`
 - `VITE_IS_PREVIEW` (use `true` only for preview deployments)
+- `VITE_DEMO_VIDEO_URL` (optional marketing page demo embed URL)
 
 Template values are available in `.env.vercel.example`.
 Ready-to-paste environment blocks are in `VERCEL_ENV_PAYLOAD.md`.
@@ -33,6 +34,13 @@ Ready-to-paste environment blocks are in `VERCEL_ENV_PAYLOAD.md`.
 
 Backend runtime secrets used by Convex functions must be set in Convex, not in Vercel.
 Examples include Stripe secret keys, webhook secrets, and Viktor Spaces secrets.
+
+LLM integration for AI Assistant uses Convex backend environment variables:
+
+- `OPENAI_API_KEY` (required for real LLM responses)
+- `OPENAI_MODEL` (optional, defaults to `gpt-4o-mini`)
+
+If `OPENAI_API_KEY` is not set, assistant responses automatically fall back to the built-in rules engine.
 
 For PayPal subscriptions, you can either set `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_PLAN_MONTHLY`, `PAYPAL_PLAN_ANNUAL`, and optional `PAYPAL_MODE` in Convex, or save those values in the admin Subscribers page inside the app.
 

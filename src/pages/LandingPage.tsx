@@ -22,6 +22,10 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { APP_NAME } from "@/lib/constants";
 
+const DEMO_VIDEO_URL =
+  import.meta.env.VITE_DEMO_VIDEO_URL ||
+  "https://www.youtube.com/embed/ysz5S6PUM-U";
+
 const stats = [
   { value: "$88B+", label: "US Property Management Market" },
   { value: "20-30hrs", label: "Saved Weekly on Scheduling" },
@@ -455,7 +459,7 @@ export function LandingPage() {
             <iframe
               title="QonsApp Product Demo"
               className="w-full aspect-video"
-              src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+              src={DEMO_VIDEO_URL}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
