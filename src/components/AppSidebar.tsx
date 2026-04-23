@@ -66,6 +66,7 @@ const customerNavItems = [
   { href: "/rent-collection", label: "Rent Collection", icon: CreditCard, feature: "dashboard" },
   { href: "/tenant-screening", label: "Tenant Screening", icon: Users, feature: "dashboard" },
   { href: "/tenant-portal", label: "Tenant Portal", icon: Home, feature: "dashboard" },
+  { href: "/portal", label: "My Portal", icon: Home, feature: "dashboard" },
   { href: "/leases", label: "Lease Management", icon: CheckSquare, feature: "dashboard" },
   { href: "/integrations", label: "PMS Integrations", icon: Settings, feature: "dashboard" },
   { href: "/time-tracking", label: "Time Tracking", icon: Clock, feature: "time_tracking" },

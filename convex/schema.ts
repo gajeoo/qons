@@ -942,6 +942,8 @@ const schema = defineSchema({
     provider: v.union(
       v.literal("yardi"),
       v.literal("quickbooks"),
+      v.literal("docusign"),
+      v.literal("hellosign"),
       v.literal("appfolio"),
       v.literal("buildium"),
       v.literal("rentmanager"),
@@ -963,6 +965,44 @@ const schema = defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_provider", ["userId", "provider"])
     .index("by_userId_status", ["userId", "status"]),
+
+  integrationOAuthStates: defineTable({
+    state: v.string(),
+    userId: v.id("users"),
+    provider: v.string(),
+    expiresAt: v.number(),
+    redirectPath: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_state", ["state"])
+    .index("by_userId", ["userId"]),
+
+  integrationAuthTokens: defineTable({
+    userId: v.id("users"),
+    provider: v.string(),
+    accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    tokenType: v.optional(v.string()),
+    scope: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    externalAccountId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_provider", ["userId", "provider"])
+    .index("by_provider", ["provider"]),
+
+  integrationWebhookEvents: defineTable({
+    provider: v.string(),
+    eventType: v.optional(v.string()),
+    externalAccountId: v.optional(v.string()),
+    status: v.union(v.literal("received"), v.literal("processed"), v.literal("ignored"), v.literal("failed")),
+    payload: v.optional(v.string()),
+    error: v.optional(v.string()),
+    receivedAt: v.number(),
+  })
+    .index("by_provider", ["provider"])
+    .index("by_provider_receivedAt", ["provider", "receivedAt"]),
 
   // ========== APP SETTINGS (key-value store) ==========
   appSettings: defineTable({

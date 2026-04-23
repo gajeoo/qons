@@ -273,6 +273,8 @@ export const upsertIntegration = mutation({
     provider: v.union(
       v.literal("yardi"),
       v.literal("quickbooks"),
+      v.literal("docusign"),
+      v.literal("hellosign"),
       v.literal("appfolio"),
       v.literal("buildium"),
       v.literal("rentmanager"),
@@ -475,5 +477,101 @@ export const createTenantPortalAnnouncement = mutation({
       createdAt: Date.now(),
       publishedAt: Date.now(),
     });
+  },
+});
+
+export const getTenantPortalOverview = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return {
+        resident: null,
+        announcements: [],
+        leases: [],
+        invoices: [],
+        leaseDocuments: [],
+      };
+    }
+
+    const user = await ctx.db.get(userId);
+    const email = (user as any)?.email as string | undefined;
+
+    const linkedResidents = await ctx.db
+      .query("residents")
+      .withIndex("by_email", (q: any) => q.eq("email", email || ""))
+      .collect();
+
+    const explicitLinkedResidents = await ctx.db
+      .query("residents")
+      .withIndex("by_userId", (q: any) => q.eq("userId", userId))
+      .collect();
+
+    const resident =
+      linkedResidents.find((r: any) => r.linkedAccountUserId === userId) ||
+      linkedResidents[0] ||
+      explicitLinkedResidents.find((r: any) => r.linkedAccountUserId === userId) ||
+      null;
+
+    if (!resident) {
+      return {
+        resident: null,
+        announcements: [],
+        leases: [],
+        invoices: [],
+        leaseDocuments: [],
+      };
+    }
+
+    const managerUserId = resident.userId;
+    const announcements = await ctx.db
+      .query("tenantPortalAnnouncements")
+      .withIndex("by_userId", (q: any) => q.eq("userId", managerUserId))
+      .order("desc")
+      .take(50);
+
+    const filteredAnnouncements = announcements.filter((a: any) => {
+      if (a.audience === "all") return true;
+      if (a.audience === "active") return resident.status === "active";
+      if (a.audience === "pending") return resident.status === "pending";
+      return false;
+    });
+
+    const leases = await ctx.db
+      .query("leaseAgreements")
+      .withIndex("by_userId_residentId", (q: any) => q.eq("userId", managerUserId).eq("residentId", resident._id))
+      .order("desc")
+      .take(20);
+
+    const invoices = await ctx.db
+      .query("rentInvoices")
+      .withIndex("by_userId_residentId", (q: any) => q.eq("userId", managerUserId).eq("residentId", resident._id))
+      .order("desc")
+      .take(50);
+
+    const docsByLease = await Promise.all(
+      leases.map(async (lease: any) => {
+        const docs = await ctx.db
+          .query("leaseDocuments")
+          .withIndex("by_leaseId", (q: any) => q.eq("leaseId", lease._id))
+          .order("desc")
+          .take(20);
+        const withUrl = await Promise.all(
+          docs.map(async (doc: any) => ({
+            ...doc,
+            fileUrl: await ctx.storage.getUrl(doc.storageId),
+          })),
+        );
+        return withUrl;
+      }),
+    );
+
+    return {
+      resident,
+      announcements: filteredAnnouncements,
+      leases,
+      invoices,
+      leaseDocuments: docsByLease.flat(),
+    };
   },
 });

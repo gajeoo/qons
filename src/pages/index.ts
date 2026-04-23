@@ -27,6 +27,7 @@ export { StaffPage } from "./StaffPage";
 export { TeamPage } from "./TeamPage";
 export { TenantScreeningPage } from "./TenantScreeningPage";
 export { TenantPortalPage } from "./TenantPortalPage";
+export { TenantPortalResidentPage } from "./TenantPortalResidentPage";
 export { TasksPage } from "./TasksPage";
 export { TimeTrackingPage } from "./TimeTrackingPage";
 export { IntegrationsPage } from "./IntegrationsPage";

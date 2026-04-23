@@ -285,7 +285,15 @@ export const listConversations = query({
           .first();
 
         return {
-          ...conv,
+          _id: conv._id,
+          _creationTime: conv._creationTime,
+          visitorId: conv.visitorId,
+          visitorName: conv.visitorName,
+          visitorEmail: conv.visitorEmail,
+          status: conv.status,
+          lastMessageAt: conv.lastMessageAt,
+          unreadByAdmin: conv.unreadByAdmin,
+          source: conv.source,
           lastMessage: lastMsg?.content?.slice(0, 100),
         };
       }),

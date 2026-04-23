@@ -41,6 +41,7 @@ import {
   StaffPage,
   TenantScreeningPage,
   TenantPortalPage,
+  TenantPortalResidentPage,
   TasksPage,
   TeamPage,
   TimeTrackingPage,
@@ -98,6 +99,7 @@ function App() {
               <Route path="/rent-collection" element={<RentCollectionPage />} />
               <Route path="/tenant-screening" element={<TenantScreeningPage />} />
               <Route path="/tenant-portal" element={<TenantPortalPage />} />
+              <Route path="/portal" element={<TenantPortalResidentPage />} />
               <Route path="/leases" element={<LeaseManagementPage />} />
               <Route path="/integrations" element={<IntegrationsPage />} />
               <Route path="/payroll" element={<PayrollPage />} />

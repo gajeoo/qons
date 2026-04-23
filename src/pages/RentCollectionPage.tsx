@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
-import { Plus } from "lucide-react";
+import { Download, FileText, Plus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,44 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+function toCsvRow(values: Array<string | number>) {
+  return values
+    .map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`)
+    .join(",");
+}
+
+function exportCsv(fileName: string, headers: string[], rows: Array<Array<string | number>>) {
+  const csv = [toCsvRow(headers), ...rows.map(toCsvRow)].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportPdf(title: string, headers: string[], rows: Array<Array<string | number>>) {
+  const htmlRows = rows
+    .map((row) => `<tr>${row.map((cell) => `<td style="border:1px solid #ddd;padding:6px;">${String(cell ?? "")}</td>`).join("")}</tr>`)
+    .join("");
+  const html = `
+    <html><head><title>${title}</title></head><body>
+    <h2>${title}</h2>
+    <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:12px;">
+      <thead><tr>${headers.map((h) => `<th style="border:1px solid #ddd;padding:6px;text-align:left;">${h}</th>`).join("")}</tr></thead>
+      <tbody>${htmlRows}</tbody>
+    </table>
+    </body></html>
+  `;
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) return;
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
 
 export function RentCollectionPage() {
   const invoices = useQuery(api.operations.listRentInvoices) || [];
@@ -49,6 +87,17 @@ export function RentCollectionPage() {
     setForm({ ...form, amount: "" });
   };
 
+  const exportRows = invoices.map((invoice) => [
+    invoice.period,
+    invoice.residentName || "",
+    invoice.propertyName || "",
+    invoice.status,
+    invoice.dueDate,
+    (invoice.amountCents / 100).toFixed(2),
+    ((invoice.paidCents || 0) / 100).toFixed(2),
+    invoice.paymentMethod || "",
+  ]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
@@ -56,7 +105,15 @@ export function RentCollectionPage() {
           <h1 className="text-2xl font-bold tracking-tight">Rent Collection & Payments</h1>
           <p className="text-sm text-muted-foreground">Create rent invoices and record ACH/card/check/cash payments.</p>
         </div>
-        <Button onClick={() => setOpen(true)} className="bg-teal text-white hover:bg-teal/90"><Plus className="size-4" /> New Invoice</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => exportCsv("rent-invoices.csv", ["Period", "Resident", "Property", "Status", "Due Date", "Amount", "Paid", "Payment Method"], exportRows)}>
+            <Download className="size-4" /> CSV
+          </Button>
+          <Button variant="outline" onClick={() => exportPdf("Rent Invoices", ["Period", "Resident", "Property", "Status", "Due Date", "Amount", "Paid", "Payment Method"], exportRows)}>
+            <FileText className="size-4" /> PDF
+          </Button>
+          <Button onClick={() => setOpen(true)} className="bg-teal text-white hover:bg-teal/90"><Plus className="size-4" /> New Invoice</Button>
+        </div>
       </div>
 
       <Card>
