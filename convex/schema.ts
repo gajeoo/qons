@@ -778,6 +778,149 @@ const schema = defineSchema({
     .index("by_ruleId", ["ruleId"])
     .index("by_userId_executedAt", ["userId", "executedAt"]),
 
+  // ========== ACCOUNTING / BOOKKEEPING ==========
+  bookkeepingEntries: defineTable({
+    userId: v.id("users"),
+    propertyId: v.optional(v.id("properties")),
+    date: v.string(),
+    type: v.union(v.literal("income"), v.literal("expense"), v.literal("transfer")),
+    category: v.string(),
+    amountCents: v.number(),
+    description: v.optional(v.string()),
+    reference: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_date", ["userId", "date"])
+    .index("by_userId_type", ["userId", "type"]),
+
+  // ========== RENT COLLECTION / PAYMENT PROCESSING ==========
+  rentInvoices: defineTable({
+    userId: v.id("users"),
+    residentId: v.optional(v.id("residents")),
+    propertyId: v.optional(v.id("properties")),
+    leaseId: v.optional(v.id("leaseAgreements")),
+    period: v.string(),
+    dueDate: v.string(),
+    amountCents: v.number(),
+    paidCents: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("partial"),
+      v.literal("paid"),
+      v.literal("overdue"),
+    ),
+    paymentMethod: v.optional(
+      v.union(
+        v.literal("card"),
+        v.literal("ach"),
+        v.literal("cash"),
+        v.literal("check"),
+        v.literal("other"),
+      ),
+    ),
+    paidAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_status", ["userId", "status"])
+    .index("by_userId_dueDate", ["userId", "dueDate"])
+    .index("by_userId_residentId", ["userId", "residentId"]),
+
+  // ========== TENANT SCREENING ==========
+  tenantScreenings: defineTable({
+    userId: v.id("users"),
+    applicantName: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    propertyId: v.optional(v.id("properties")),
+    provider: v.union(
+      v.literal("transunion"),
+      v.literal("experian"),
+      v.literal("checkr"),
+      v.literal("other"),
+    ),
+    status: v.union(
+      v.literal("requested"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    result: v.optional(v.union(v.literal("pass"), v.literal("review"), v.literal("decline"))),
+    score: v.optional(v.number()),
+    externalReference: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_status", ["userId", "status"])
+    .index("by_userId_provider", ["userId", "provider"]),
+
+  // ========== LEASE MANAGEMENT / ESIGN ==========
+  leaseAgreements: defineTable({
+    userId: v.id("users"),
+    residentId: v.optional(v.id("residents")),
+    propertyId: v.optional(v.id("properties")),
+    unit: v.optional(v.string()),
+    startDate: v.string(),
+    endDate: v.string(),
+    rentCents: v.number(),
+    depositCents: v.optional(v.number()),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("sent"),
+      v.literal("signed"),
+      v.literal("active"),
+      v.literal("expired"),
+      v.literal("terminated"),
+    ),
+    esignProvider: v.union(
+      v.literal("docusign"),
+      v.literal("hellosign"),
+      v.literal("internal"),
+      v.literal("none"),
+    ),
+    externalDocumentId: v.optional(v.string()),
+    signedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_status", ["userId", "status"])
+    .index("by_userId_endDate", ["userId", "endDate"])
+    .index("by_userId_residentId", ["userId", "residentId"]),
+
+  // ========== PMS INTEGRATIONS ==========
+  integrationConnections: defineTable({
+    userId: v.id("users"),
+    provider: v.union(
+      v.literal("yardi"),
+      v.literal("quickbooks"),
+      v.literal("appfolio"),
+      v.literal("buildium"),
+      v.literal("rentmanager"),
+      v.literal("other"),
+    ),
+    status: v.union(
+      v.literal("connected"),
+      v.literal("disconnected"),
+      v.literal("error"),
+      v.literal("pending"),
+    ),
+    accountLabel: v.optional(v.string()),
+    externalAccountId: v.optional(v.string()),
+    metadata: v.optional(v.string()),
+    lastSyncedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_provider", ["userId", "provider"])
+    .index("by_userId_status", ["userId", "status"]),
+
   // ========== APP SETTINGS (key-value store) ==========
   appSettings: defineTable({
     key: v.string(),
