@@ -17,6 +17,7 @@ import {
   AdminUsersPage,
   AmenitiesPage,
   AnalyticsPage,
+  AutomationsPage,
   BlogPage,
   CheckoutSuccessPage,
   ContactPage,
@@ -86,6 +87,7 @@ function App() {
               <Route path="/map" element={<MapPage />} />
               <Route path="/time-tracking" element={<TimeTrackingPage />} />
               <Route path="/tasks" element={<TasksPage />} />
+              <Route path="/automations" element={<AutomationsPage />} />
               <Route path="/payroll" element={<PayrollPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/amenities" element={<AmenitiesPage />} />

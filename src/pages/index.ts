@@ -2,6 +2,7 @@ export { AboutPage } from "./AboutPage";
 export { AccountPausedPage } from "./AccountPausedPage";
 export { AmenitiesPage } from "./AmenitiesPage";
 export { AnalyticsPage } from "./AnalyticsPage";
+export { default as AutomationsPage } from "./AutomationsPage";
 export { BlogPage } from "./BlogPage";
 export { CheckoutSuccessPage } from "./CheckoutSuccessPage";
 export { ContactPage } from "./ContactPage";

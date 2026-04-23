@@ -691,6 +691,93 @@ const schema = defineSchema({
     .index("by_status", ["status"])
     .index("by_propertyId", ["propertyId"]),
 
+  // ========== AI ASSISTANT ==========
+  aiAssistantMessages: defineTable({
+    userId: v.id("users"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    timestamp: v.number(),
+    actionTaken: v.optional(v.string()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_timestamp", ["userId", "timestamp"]),
+
+  // ========== AUTOMATION RULES ==========
+  automationRules: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    isActive: v.boolean(),
+    trigger: v.union(
+      v.literal("task_created"),
+      v.literal("task_status_changed"),
+      v.literal("lease_expiring"),
+      v.literal("rent_overdue"),
+      v.literal("shift_no_show"),
+      v.literal("maintenance_request"),
+      v.literal("hoa_violation_created"),
+      v.literal("amenity_booking_created"),
+      v.literal("new_resident"),
+      v.literal("schedule"),
+    ),
+    conditions: v.array(
+      v.object({
+        field: v.string(),
+        operator: v.union(
+          v.literal("equals"),
+          v.literal("not_equals"),
+          v.literal("contains"),
+          v.literal("greater_than"),
+          v.literal("less_than"),
+          v.literal("days_before"),
+          v.literal("days_after"),
+        ),
+        value: v.string(),
+      }),
+    ),
+    actions: v.array(
+      v.object({
+        type: v.union(
+          v.literal("create_task"),
+          v.literal("assign_staff"),
+          v.literal("update_status"),
+          v.literal("send_notification"),
+          v.literal("escalate_priority"),
+          v.literal("add_note"),
+        ),
+        config: v.string(),
+      }),
+    ),
+    cronExpression: v.optional(v.string()),
+    lastRunAt: v.optional(v.number()),
+    runCount: v.optional(v.number()),
+    propertyId: v.optional(v.id("properties")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_trigger", ["trigger"])
+    .index("by_isActive", ["isActive"])
+    .index("by_userId_isActive", ["userId", "isActive"]),
+
+  automationLogs: defineTable({
+    userId: v.id("users"),
+    ruleId: v.id("automationRules"),
+    ruleName: v.string(),
+    trigger: v.string(),
+    status: v.union(
+      v.literal("success"),
+      v.literal("failed"),
+      v.literal("skipped"),
+    ),
+    actionsExecuted: v.number(),
+    details: v.optional(v.string()),
+    executedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_ruleId", ["ruleId"])
+    .index("by_userId_executedAt", ["userId", "executedAt"]),
+
   // ========== APP SETTINGS (key-value store) ==========
   appSettings: defineTable({
     key: v.string(),

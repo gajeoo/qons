@@ -2,6 +2,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
 import {
   BarChart3,
+  Bot,
   Building2,
   Calendar,
   CheckSquare,
@@ -60,6 +61,7 @@ const customerNavItems = [
   { href: "/residents", label: "Residents", icon: Home, feature: "residents" },
   { href: "/schedule", label: "Shift Calendar", icon: Calendar, feature: "schedule" },
   { href: "/tasks", label: "Tasks", icon: CheckSquare, feature: "tasks" },
+  { href: "/automations", label: "Automations", icon: Bot, feature: "tasks" },
   { href: "/time-tracking", label: "Time Tracking", icon: Clock, feature: "time_tracking" },
   { href: "/payroll", label: "Payroll", icon: FileSpreadsheet, feature: "payroll_csv" },
   { href: "/analytics", label: "Analytics", icon: BarChart3, feature: "basic_analytics" },

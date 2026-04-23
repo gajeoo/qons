@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
+import { AiAssistant } from "./AiAssistant";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "./ui/sidebar";
 import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 
@@ -36,6 +37,7 @@ export function AppLayout() {
           <Outlet />
         </main>
       </SidebarInset>
+      <AiAssistant />
     </SidebarProvider>
   );
 }
