@@ -1,5 +1,14 @@
-import { CreditCard, DollarSign, FileText, Palette, Save, Tag } from "lucide-react";
-import { useState } from "react";
+import {
+  CreditCard,
+  DollarSign,
+  FileText,
+  Mail,
+  Palette,
+  Save,
+  Smartphone,
+  Tag,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +22,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -307,6 +317,171 @@ function BrandingTab() {
   );
 }
 
+function MessagingTab() {
+  const config = useQuery(api.siteConfig.getAdmin);
+  const updateConfig = useMutation(api.siteConfig.update);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    supportEmail: "",
+    supportPhone: "",
+    sendgridApiKey: "",
+    twilioAccountSid: "",
+    twilioAuthToken: "",
+    twilioPhoneNumber: "",
+    enableEmailNotifications: true,
+    enableSmsNotifications: false,
+  });
+
+  useEffect(() => {
+    if (config) {
+      setForm({
+        supportEmail: config.supportEmail || "",
+        supportPhone: config.supportPhone || "",
+        sendgridApiKey: config.sendgridApiKey || "",
+        twilioAccountSid: config.twilioAccountSid || "",
+        twilioAuthToken: config.twilioAuthToken || "",
+        twilioPhoneNumber: config.twilioPhoneNumber || "",
+        enableEmailNotifications: config.enableEmailNotifications ?? true,
+        enableSmsNotifications: config.enableSmsNotifications ?? false,
+      });
+    }
+  }, [config]);
+
+  const setField = (field: keyof typeof form, value: string | boolean) => {
+    setForm(current => ({ ...current, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateConfig(form);
+      toast.success("Messaging settings saved");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to save messaging settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="size-5" /> Email Delivery
+          </CardTitle>
+          <CardDescription>
+            Configure the provider used for tenant application and team invitation emails.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label>Support Email</Label>
+              <Input
+                value={form.supportEmail}
+                onChange={e => setField("supportEmail", e.target.value)}
+                placeholder="leasing@yourcompany.com"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>Support Phone</Label>
+              <Input
+                value={form.supportPhone}
+                onChange={e => setField("supportPhone", e.target.value)}
+                placeholder="+1 555 123 4567"
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <div>
+            <Label>SendGrid API Key</Label>
+            <Input
+              value={form.sendgridApiKey}
+              onChange={e => setField("sendgridApiKey", e.target.value)}
+              placeholder="SG..."
+              className="mt-1"
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              Team invites and renter application invitations use this provider when email notifications are enabled.
+            </p>
+          </div>
+          <div className="flex items-center justify-between rounded-md border p-4">
+            <div>
+              <p className="font-medium">Enable Email Notifications</p>
+              <p className="text-sm text-muted-foreground">
+                Allows outbound invitation and notification emails.
+              </p>
+            </div>
+            <Switch
+              checked={form.enableEmailNotifications}
+              onCheckedChange={checked =>
+                setField("enableEmailNotifications", checked)
+              }
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Smartphone className="size-5" /> SMS Delivery
+          </CardTitle>
+          <CardDescription>
+            Optional Twilio setup for text notifications.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label>Twilio Account SID</Label>
+              <Input
+                value={form.twilioAccountSid}
+                onChange={e => setField("twilioAccountSid", e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>Twilio Auth Token</Label>
+              <Input
+                value={form.twilioAuthToken}
+                onChange={e => setField("twilioAuthToken", e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Twilio Phone Number</Label>
+              <Input
+                value={form.twilioPhoneNumber}
+                onChange={e => setField("twilioPhoneNumber", e.target.value)}
+                placeholder="+1 555 123 4567"
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-md border p-4">
+            <div>
+              <p className="font-medium">Enable SMS Notifications</p>
+              <p className="text-sm text-muted-foreground">
+                Enables outbound text notifications when Twilio is configured.
+              </p>
+            </div>
+            <Switch
+              checked={form.enableSmsNotifications}
+              onCheckedChange={checked => setField("enableSmsNotifications", checked)}
+            />
+          </div>
+          <Button onClick={handleSave} disabled={saving}>
+            <Save className="size-4 mr-2" /> Save Messaging Settings
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function TenantTemplatePreviewTab() {
   const templates =
     useQuery(api.documentTemplates.listForOrganizationViewer, {
@@ -360,23 +535,26 @@ export function AdminSettingsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Admin Settings</h1>
         <p className="text-muted-foreground mt-1">
-          Manage pricing, discounts, and branding for your QuonsApp instance.
+          Manage pricing, discounts, branding, and delivery integrations for your QuonsApp instance.
         </p>
       </div>
 
       <Tabs defaultValue="pricing" className="w-full">
-        <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-2 xl:grid-cols-4">
-          <TabsTrigger value="pricing" className="justify-start sm:justify-center min-w-0 h-auto py-2 whitespace-normal break-words leading-tight text-xs sm:text-sm">
-            <CreditCard className="size-4 mr-1.5" /> Pricing
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-5">
+          <TabsTrigger value="pricing" className="justify-center min-w-0 h-auto py-2.5 whitespace-normal break-words leading-tight text-xs sm:text-sm px-2">
+            <CreditCard className="size-4 mr-1" /> <span>Pricing</span>
           </TabsTrigger>
-          <TabsTrigger value="discounts" className="justify-start sm:justify-center min-w-0 h-auto py-2 whitespace-normal break-words leading-tight text-xs sm:text-sm">
-            <Tag className="size-4 mr-1.5" /> Discounts
+          <TabsTrigger value="discounts" className="justify-center min-w-0 h-auto py-2.5 whitespace-normal break-words leading-tight text-xs sm:text-sm px-2">
+            <Tag className="size-4 mr-1" /> <span>Discounts</span>
           </TabsTrigger>
-          <TabsTrigger value="branding" className="justify-start sm:justify-center min-w-0 h-auto py-2 whitespace-normal break-words leading-tight text-xs sm:text-sm">
-            <Palette className="size-4 mr-1.5" /> Branding
+          <TabsTrigger value="branding" className="justify-center min-w-0 h-auto py-2.5 whitespace-normal break-words leading-tight text-xs sm:text-sm px-2">
+            <Palette className="size-4 mr-1" /> <span>Branding</span>
           </TabsTrigger>
-          <TabsTrigger value="tenantTemplates" className="justify-start sm:justify-center min-w-0 h-auto py-2 whitespace-normal break-words leading-tight text-xs sm:text-sm">
-            <FileText className="size-4 mr-1.5" /> Templates
+          <TabsTrigger value="messaging" className="justify-center min-w-0 h-auto py-2.5 whitespace-normal break-words leading-tight text-xs sm:text-sm px-2">
+            <Mail className="size-4 mr-1" /> <span>Messaging</span>
+          </TabsTrigger>
+          <TabsTrigger value="tenantTemplates" className="justify-center min-w-0 h-auto py-2.5 whitespace-normal break-words leading-tight text-xs sm:text-sm px-2">
+            <FileText className="size-4 mr-1" /> <span>Templates</span>
           </TabsTrigger>
         </TabsList>
 
@@ -390,6 +568,10 @@ export function AdminSettingsPage() {
 
         <TabsContent value="branding" className="mt-4">
           <BrandingTab />
+        </TabsContent>
+
+        <TabsContent value="messaging" className="mt-4">
+          <MessagingTab />
         </TabsContent>
 
         <TabsContent value="tenantTemplates" className="mt-4">

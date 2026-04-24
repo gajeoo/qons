@@ -22,10 +22,27 @@ import {
 } from "@/components/ui/card";
 import { api } from "../../../convex/_generated/api";
 
+type PricingPlanSummary = {
+  plan: "starter" | "pro" | "enterprise";
+  name: string;
+  monthlyPrice: number;
+  annualPrice?: number;
+  unitLimit?: string;
+  subAccountLimit?: string;
+  description?: string;
+};
+
 export function AdminDashboardPage() {
   const dashStats = useQuery(api.admin.getDashboardStats);
   const leadStats = useQuery(api.leads.getStats);
   const subStats = useQuery(api.subscriptions.getStats);
+  const pricingPlans =
+    ((useQuery(api.pricing.getPlans) ?? []) as PricingPlanSummary[]);
+
+  const planPriceById = new Map(pricingPlans.map(plan => [plan.plan, plan]));
+  const starterMonthly = planPriceById.get("starter")?.monthlyPrice ?? 4599;
+  const proMonthly = planPriceById.get("pro")?.monthlyPrice ?? 9599;
+  const businessMonthly = planPriceById.get("enterprise")?.monthlyPrice ?? 14099;
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -48,9 +65,7 @@ export function AdminDashboardPage() {
     {
       title: "Total Users",
       value: dashStats?.totalUsers?.toString() ?? "—",
-      change: dashStats
-        ? `+${dashStats.newUsersThisWeek} this week`
-        : "",
+      change: dashStats ? `+${dashStats.newUsersThisWeek} this week` : "",
       icon: Users,
       color: "text-chart-2",
       bg: "bg-chart-2/10",
@@ -68,9 +83,7 @@ export function AdminDashboardPage() {
     {
       title: "Total Leads",
       value: dashStats?.totalLeads?.toString() ?? "—",
-      change: dashStats
-        ? `+${dashStats.newLeadsThisWeek} this week`
-        : "",
+      change: dashStats ? `+${dashStats.newLeadsThisWeek} this week` : "",
       icon: MessageSquare,
       color: "text-chart-4",
       bg: "bg-chart-4/10",
@@ -122,7 +135,7 @@ export function AdminDashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
+        {stats.map(stat => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -155,9 +168,7 @@ export function AdminDashboardPage() {
               <UserPlus className="size-5 text-teal" />
               Lead Pipeline
             </CardTitle>
-            <CardDescription>
-              Current lead status breakdown
-            </CardDescription>
+            <CardDescription>Current lead status breakdown</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -177,7 +188,7 @@ export function AdminDashboardPage() {
                   value: leadStats?.converted ?? 0,
                   color: "bg-teal",
                 },
-              ].map((item) => (
+              ].map(item => (
                 <div key={item.label} className="flex items-center gap-3">
                   <div className={`w-2 h-2 rounded-full ${item.color}`} />
                   <span className="text-sm flex-1">{item.label}</span>
@@ -186,12 +197,7 @@ export function AdminDashboardPage() {
               ))}
 
               <div className="pt-3 border-t">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  asChild
-                >
+                <Button variant="outline" size="sm" className="w-full" asChild>
                   <Link to="/admin/leads">
                     View All Leads
                     <ArrowUpRight className="size-3.5" />
@@ -215,24 +221,24 @@ export function AdminDashboardPage() {
             <div className="space-y-4">
               {[
                 {
-                  label: "Starter Plan ($49/mo)",
+                  label: `Starter Plan (${formatCurrency(starterMonthly)}/mo)`,
                   count: subStats?.starterCount ?? 0,
-                  revenue: (subStats?.starterCount ?? 0) * 4900,
+                  revenue: (subStats?.starterCount ?? 0) * starterMonthly,
                   color: "bg-chart-1",
                 },
                 {
-                  label: "Pro Plan ($149/mo)",
+                  label: `Pro Plan (${formatCurrency(proMonthly)}/mo)`,
                   count: subStats?.proCount ?? 0,
-                  revenue: (subStats?.proCount ?? 0) * 14900,
+                  revenue: (subStats?.proCount ?? 0) * proMonthly,
                   color: "bg-teal",
                 },
                 {
-                  label: "Enterprise (Custom)",
+                  label: `Business Plan (${formatCurrency(businessMonthly)}/mo)`,
                   count: subStats?.enterpriseCount ?? 0,
-                  revenue: (subStats?.enterpriseCount ?? 0) * 29900,
+                  revenue: (subStats?.enterpriseCount ?? 0) * businessMonthly,
                   color: "bg-chart-4",
                 },
-              ].map((item) => (
+              ].map(item => (
                 <div key={item.label} className="flex items-center gap-3">
                   <div className={`w-2 h-2 rounded-full ${item.color}`} />
                   <div className="flex-1">
@@ -254,12 +260,7 @@ export function AdminDashboardPage() {
                 </span>
               </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                asChild
-              >
+              <Button variant="outline" size="sm" className="w-full" asChild>
                 <Link to="/admin/subscribers">
                   View All Subscribers
                   <ArrowUpRight className="size-3.5" />
@@ -290,9 +291,7 @@ export function AdminDashboardPage() {
               <p className="text-3xl font-bold text-chart-2">
                 {subStats?.pastDueCount ?? 0}
               </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Past Due
-              </p>
+              <p className="text-sm text-muted-foreground mt-1">Past Due</p>
             </div>
           </CardContent>
         </Card>
@@ -302,9 +301,7 @@ export function AdminDashboardPage() {
               <p className="text-3xl font-bold text-chart-4">
                 {subStats?.canceledCount ?? 0}
               </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Churned
-              </p>
+              <p className="text-sm text-muted-foreground mt-1">Churned</p>
             </div>
           </CardContent>
         </Card>

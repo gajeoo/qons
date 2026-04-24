@@ -6,6 +6,7 @@ import {
   Bot,
   Building2,
   Calendar,
+  ChevronDown,
   CheckSquare,
   Clock,
   CreditCard,
@@ -520,6 +521,7 @@ function NavLink({
 
 function SidebarNav() {
   const location = useLocation();
+  const { setOpenMobile } = useSidebar();
   const isAdmin = useQuery(api.admin.isAdmin);
   const {
     hasFeature,
@@ -603,15 +605,34 @@ function SidebarNav() {
               Admin
             </div>
           </SidebarMenuItem>
-          {adminNavItems.map(item => (
-            <NavLink
-              key={item.href}
-              href={item.href}
-              label={item.label}
-              icon={item.icon}
-              isActive={location.pathname === item.href}
-            />
-          ))}
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  isActive={adminNavItems.some(item => location.pathname === item.href)}
+                  tooltip="Admin-only tools"
+                >
+                  <Shield className="size-4 shrink-0" />
+                  <span className="truncate">Admin Tools</span>
+                  <ChevronDown className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="right" className="w-56">
+                {adminNavItems.map(item => {
+                  const Icon = item.icon;
+
+                  return (
+                    <DropdownMenuItem asChild key={item.href}>
+                      <Link to={item.href} onClick={() => setOpenMobile(false)}>
+                        <Icon className="size-4" />
+                        {item.label}
+                      </Link>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
         </SidebarMenu>
       )}
     </SidebarContent>
