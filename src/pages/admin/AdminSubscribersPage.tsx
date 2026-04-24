@@ -1,16 +1,32 @@
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import {
   CreditCard,
   Crown,
+  Loader2,
   Search,
   Sparkles,
   Zap,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 
 const planConfig: Record<
@@ -48,8 +64,24 @@ const statusColors: Record<string, string> = {
 export function AdminSubscribersPage() {
   const subscriptions = useQuery(api.subscriptions.listAll);
   const subStats = useQuery(api.subscriptions.getStats);
+  const paypalConfig = useQuery(api.paypal.getAdminConfig);
+  const savePayPalConfig = useAction(api.paypal.setCredentials);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPlan, setFilterPlan] = useState<string | null>(null);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [monthlyPlanId, setMonthlyPlanId] = useState("");
+  const [annualPlanId, setAnnualPlanId] = useState("");
+  const [mode, setMode] = useState<"sandbox" | "live">("live");
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  useEffect(() => {
+    if (!paypalConfig) return;
+    setClientId(paypalConfig.clientId);
+    setMonthlyPlanId(paypalConfig.monthlyPlanId);
+    setAnnualPlanId(paypalConfig.annualPlanId);
+    setMode(paypalConfig.mode);
+  }, [paypalConfig]);
 
   const formatCurrency = (cents: number) =>
     new Intl.NumberFormat("en-US", {
@@ -63,6 +95,53 @@ export function AdminSubscribersPage() {
       day: "numeric",
       year: "numeric",
     });
+
+  const getPlanSummary = (sub: NonNullable<typeof subscriptions>[number]) => {
+    if (sub.plan === "starter" && sub.billingCycle === "annual") {
+      return {
+        label: "Premium",
+        icon: Zap,
+        color: "text-chart-1",
+        price: "$599.88/yr",
+      };
+    }
+
+    if (sub.plan === "starter") {
+      return {
+        label: "Premium",
+        icon: Zap,
+        color: "text-chart-1",
+        price: "$49.99/mo",
+      };
+    }
+
+    return planConfig[sub.plan] ?? planConfig.starter;
+  };
+
+  const handleSaveConfig = async () => {
+    setSavingConfig(true);
+    try {
+      const result = await savePayPalConfig({
+        clientId,
+        clientSecret: clientSecret.trim() || undefined,
+        monthlyPlanId,
+        annualPlanId,
+        mode,
+      });
+
+      if (!result.success) {
+        toast.error(result.error || "Failed to save PayPal configuration");
+        return;
+      }
+
+      setClientSecret("");
+      toast.success("PayPal configuration saved");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to save PayPal configuration");
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   const filtered = subscriptions?.filter((sub) => {
     if (filterPlan && sub.plan !== filterPlan) return false;
@@ -84,6 +163,89 @@ export function AdminSubscribersPage() {
           Manage subscriptions and track revenue
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <CardTitle>PayPal Billing Configuration</CardTitle>
+              <CardDescription>
+                Save the PayPal app credentials and recurring plan IDs used by the pricing page.
+              </CardDescription>
+            </div>
+            <Badge variant={paypalConfig?.configured ? "default" : "outline"}>
+              {paypalConfig?.configured ? "Configured" : "Setup required"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="paypal-client-id">PayPal Client ID</Label>
+              <Input
+                id="paypal-client-id"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                placeholder="PayPal REST app client ID"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="paypal-client-secret">PayPal Client Secret</Label>
+              <Input
+                id="paypal-client-secret"
+                type="password"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                placeholder={paypalConfig?.hasClientSecret ? "Stored already. Enter only to replace it." : "PayPal REST app client secret"}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="paypal-monthly-plan">Monthly Plan ID</Label>
+              <Input
+                id="paypal-monthly-plan"
+                value={monthlyPlanId}
+                onChange={(e) => setMonthlyPlanId(e.target.value)}
+                placeholder="P-... monthly recurring plan"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="paypal-annual-plan">Annual Plan ID</Label>
+              <Input
+                id="paypal-annual-plan"
+                value={annualPlanId}
+                onChange={(e) => setAnnualPlanId(e.target.value)}
+                placeholder="P-... annual recurring plan"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-[220px_1fr] md:items-end">
+            <div className="space-y-2">
+              <Label>Mode</Label>
+              <Select
+                value={mode}
+                onValueChange={(value) => setMode(value as "sandbox" | "live")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sandbox">Sandbox</SelectItem>
+                  <SelectItem value="live">Live</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+              Create two PayPal subscription plans first: monthly at $49.99 and annual at $599.88. Then paste those PayPal plan IDs here.
+            </div>
+          </div>
+
+          <Button onClick={handleSaveConfig} disabled={savingConfig}>
+            {savingConfig ? <Loader2 className="size-4 animate-spin" /> : null}
+            Save PayPal Configuration
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Revenue Stats */}
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
@@ -175,7 +337,7 @@ export function AdminSubscribersPage() {
           </Card>
         ) : (
           filtered.map((sub) => {
-            const plan = planConfig[sub.plan] ?? planConfig.starter;
+            const plan = getPlanSummary(sub);
             const statusColor = statusColors[sub.status] ?? statusColors.active;
 
             return (
@@ -204,6 +366,9 @@ export function AdminSubscribersPage() {
                           <plan.icon className={`size-3 ${plan.color}`} />
                           {plan.label} — {plan.price}
                         </span>
+                        {sub.billingProvider ? (
+                          <span className="capitalize">{sub.billingProvider}</span>
+                        ) : null}
                       </div>
                     </div>
 

@@ -8,7 +8,7 @@ export const listViolations = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    let violations;
+    let violations: any[] = [];
     if (args.propertyId) {
       violations = await ctx.db.query("hoaViolations")
         .withIndex("by_propertyId", (q) => q.eq("propertyId", args.propertyId!))
@@ -20,7 +20,26 @@ export const listViolations = query({
         .collect();
     }
     if (args.status) violations = violations.filter((v) => v.status === args.status);
-    return violations;
+    return await Promise.all(
+      violations.map(async (violation) => {
+        const attachmentUrls = await Promise.all(
+          (violation.attachmentStorageIds ?? []).map(async (storageId: any) => await ctx.storage.getUrl(storageId)),
+        );
+        return {
+          ...violation,
+          attachmentUrls: attachmentUrls.filter((url): url is string => Boolean(url)),
+        };
+      }),
+    );
+  },
+});
+
+export const generateAttachmentUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    return await ctx.storage.generateUploadUrl();
   },
 });
 
@@ -33,6 +52,7 @@ export const createViolation = mutation({
     description: v.string(),
     fineAmount: v.optional(v.number()),
     notes: v.optional(v.string()),
+    attachmentStorageIds: v.optional(v.array(v.id("_storage"))),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -40,6 +60,8 @@ export const createViolation = mutation({
     return await ctx.db.insert("hoaViolations", {
       ...args, userId, status: "reported",
       reportedDate: new Date().toISOString().split("T")[0],
+      noticeHistory: [],
+      attachmentStorageIds: args.attachmentStorageIds ?? [],
     });
   },
 });
@@ -63,13 +85,59 @@ export const updateViolation = mutation({
   },
 });
 
+export const sendViolationNotice = mutation({
+  args: {
+    id: v.id("hoaViolations"),
+    template: v.union(
+      v.literal("courtesy_warning"),
+      v.literal("fine_notice"),
+      v.literal("hearing_notice"),
+      v.literal("final_notice"),
+    ),
+    subject: v.string(),
+    message: v.string(),
+    deliveryMethod: v.union(
+      v.literal("email"),
+      v.literal("letter"),
+      v.literal("portal"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const violation = await ctx.db.get(args.id);
+    if (!violation || violation.userId !== userId) throw new Error("Not found");
+
+    const nextStatus = args.template === "courtesy_warning"
+      ? "warning_sent"
+      : args.template === "fine_notice"
+        ? "fine_issued"
+        : "escalated";
+
+    await ctx.db.patch(args.id, {
+      status: violation.status === "resolved" ? violation.status : nextStatus,
+      noticeHistory: [
+        ...(violation.noticeHistory ?? []),
+        {
+          template: args.template,
+          subject: args.subject,
+          message: args.message,
+          sentAt: Date.now(),
+          deliveryMethod: args.deliveryMethod,
+        },
+      ],
+    });
+  },
+});
+
 // ========== DUES ==========
 export const listDues = query({
   args: { propertyId: v.optional(v.id("properties")), status: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    let dues;
+    let dues: any[] = [];
     if (args.propertyId) {
       dues = await ctx.db.query("hoaDues")
         .withIndex("by_propertyId", (q) => q.eq("propertyId", args.propertyId!))
@@ -82,6 +150,58 @@ export const listDues = query({
     }
     if (args.status) dues = dues.filter((d) => d.status === args.status);
     return dues;
+  },
+});
+
+export const getDueSummary = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return {
+        totalPending: 0,
+        totalOverdue: 0,
+        totalCollected: 0,
+        pendingCount: 0,
+        overdueCount: 0,
+        collectedCount: 0,
+        overdueByProperty: [],
+      };
+    }
+
+    const dues = await ctx.db.query("hoaDues")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+
+    const toSafeAmount = (value: unknown) => {
+      const amount = typeof value === "number" ? value : Number(value);
+      return Number.isFinite(amount) ? amount : 0;
+    };
+
+    const overdueByPropertyMap = new Map<string, { propertyId: string; overdueAmount: number; overdueCount: number }>();
+
+    for (const due of dues) {
+      if (due.status !== "overdue") continue;
+      const propertyId = String(due.propertyId ?? "unknown");
+      const current = overdueByPropertyMap.get(propertyId) ?? {
+        propertyId,
+        overdueAmount: 0,
+        overdueCount: 0,
+      };
+      current.overdueAmount += toSafeAmount(due.amount);
+      current.overdueCount += 1;
+      overdueByPropertyMap.set(propertyId, current);
+    }
+
+    return {
+      totalPending: dues.filter((due) => due.status === "pending").reduce((sum, due) => sum + toSafeAmount(due.amount), 0),
+      totalOverdue: dues.filter((due) => due.status === "overdue").reduce((sum, due) => sum + toSafeAmount(due.amount), 0),
+      totalCollected: dues.filter((due) => due.status === "paid").reduce((sum, due) => sum + toSafeAmount(due.amount), 0),
+      pendingCount: dues.filter((due) => due.status === "pending").length,
+      overdueCount: dues.filter((due) => due.status === "overdue").length,
+      collectedCount: dues.filter((due) => due.status === "paid").length,
+      overdueByProperty: Array.from(overdueByPropertyMap.values()).sort((left, right) => right.overdueAmount - left.overdueAmount),
+    };
   },
 });
 
@@ -193,21 +313,117 @@ export const closeVote = mutation({
   },
 });
 
+// ========== BOARD MEETINGS ==========
+export const listMeetings = query({
+  args: { propertyId: v.optional(v.id("properties")), status: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    let meetings: any[] = [];
+    if (args.propertyId) {
+      meetings = await ctx.db.query("hoaMeetings")
+        .withIndex("by_propertyId", (q) => q.eq("propertyId", args.propertyId!))
+        .collect();
+      meetings = meetings.filter((meeting) => meeting.userId === userId);
+    } else {
+      meetings = await ctx.db.query("hoaMeetings")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .collect();
+    }
+
+    if (args.status) {
+      meetings = meetings.filter((meeting) => meeting.status === args.status);
+    }
+
+    return meetings.sort((a, b) => {
+      const left = `${a.scheduledDate}|${a.scheduledTime ?? ""}`;
+      const right = `${b.scheduledDate}|${b.scheduledTime ?? ""}`;
+      return left.localeCompare(right);
+    });
+  },
+});
+
+export const createMeeting = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    scheduledDate: v.string(),
+    scheduledTime: v.optional(v.string()),
+    location: v.optional(v.string()),
+    agenda: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    return await ctx.db.insert("hoaMeetings", {
+      ...args,
+      userId,
+      status: "scheduled",
+    });
+  },
+});
+
+export const updateMeeting = mutation({
+  args: {
+    id: v.id("hoaMeetings"),
+    status: v.optional(v.union(
+      v.literal("scheduled"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+    )),
+    minutes: v.optional(v.string()),
+    attendeeCount: v.optional(v.number()),
+    followUpActions: v.optional(v.array(v.string())),
+    location: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const meeting = await ctx.db.get(args.id);
+    if (!meeting || meeting.userId !== userId) throw new Error("Not found");
+
+    const { id, ...updates } = args;
+    const filtered = Object.fromEntries(
+      Object.entries(updates).filter(([, val]) => val !== undefined),
+    );
+    await ctx.db.patch(args.id, filtered);
+  },
+});
+
 // ========== ARC REQUESTS ==========
 export const listArcRequests = query({
   args: { propertyId: v.optional(v.id("properties")) },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
+    let requests: any[] = [];
     if (args.propertyId) {
-      const reqs = await ctx.db.query("arcRequests")
+      requests = await ctx.db.query("arcRequests")
         .withIndex("by_propertyId", (q) => q.eq("propertyId", args.propertyId!))
         .collect();
-      return reqs.filter((r) => r.userId === userId);
+      requests = requests.filter((request) => request.userId === userId);
+    } else {
+      requests = await ctx.db.query("arcRequests")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .collect();
     }
-    return await ctx.db.query("arcRequests")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect();
+
+    return await Promise.all(
+      requests.map(async (request) => {
+        const attachmentUrls = await Promise.all(
+          (request.attachmentStorageIds ?? []).map(async (storageId: any) => await ctx.storage.getUrl(storageId)),
+        );
+        return {
+          ...request,
+          attachmentUrls: attachmentUrls.filter((url): url is string => Boolean(url)),
+        };
+      }),
+    );
   },
 });
 
@@ -218,6 +434,7 @@ export const createArcRequest = mutation({
     residentName: v.string(),
     requestType: v.union(v.literal("exterior_modification"), v.literal("landscaping"), v.literal("fence"), v.literal("paint"), v.literal("addition"), v.literal("other")),
     description: v.string(),
+    attachmentStorageIds: v.optional(v.array(v.id("_storage"))),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -225,6 +442,7 @@ export const createArcRequest = mutation({
     return await ctx.db.insert("arcRequests", {
       ...args, userId, status: "submitted",
       submittedDate: new Date().toISOString().split("T")[0],
+      attachmentStorageIds: args.attachmentStorageIds ?? [],
     });
   },
 });

@@ -84,6 +84,12 @@ const schema = defineSchema({
     stripeCustomerId: v.string(),
     stripeSubscriptionId: v.string(),
     stripePriceId: v.string(),
+    billingProvider: v.optional(
+      v.union(v.literal("stripe"), v.literal("paypal"), v.literal("admin")),
+    ),
+    billingCycle: v.optional(
+      v.union(v.literal("monthly"), v.literal("annual")),
+    ),
     plan: v.union(
       v.literal("starter"),
       v.literal("pro"),
@@ -169,6 +175,7 @@ const schema = defineSchema({
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
     imageUrl: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")),
   })
     .index("by_userId", ["userId"])
     .index("by_status", ["status"]),
@@ -388,6 +395,23 @@ const schema = defineSchema({
     reportedDate: v.string(),
     resolvedDate: v.optional(v.string()),
     notes: v.optional(v.string()),
+    attachmentStorageIds: v.optional(v.array(v.id("_storage"))),
+    noticeHistory: v.optional(v.array(v.object({
+      template: v.union(
+        v.literal("courtesy_warning"),
+        v.literal("fine_notice"),
+        v.literal("hearing_notice"),
+        v.literal("final_notice"),
+      ),
+      subject: v.string(),
+      message: v.string(),
+      sentAt: v.number(),
+      deliveryMethod: v.union(
+        v.literal("email"),
+        v.literal("letter"),
+        v.literal("portal"),
+      ),
+    }))),
   })
     .index("by_userId", ["userId"])
     .index("by_propertyId", ["propertyId"])
@@ -435,6 +459,29 @@ const schema = defineSchema({
     .index("by_propertyId", ["propertyId"])
     .index("by_status", ["status"]),
 
+  hoaMeetings: defineTable({
+    userId: v.id("users"),
+    propertyId: v.id("properties"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    scheduledDate: v.string(),
+    scheduledTime: v.optional(v.string()),
+    location: v.optional(v.string()),
+    agenda: v.array(v.string()),
+    status: v.union(
+      v.literal("scheduled"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+    ),
+    attendeeCount: v.optional(v.number()),
+    minutes: v.optional(v.string()),
+    followUpActions: v.optional(v.array(v.string())),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_propertyId", ["propertyId"])
+    .index("by_status", ["status"]),
+
   arcRequests: defineTable({
     userId: v.id("users"),
     propertyId: v.id("properties"),
@@ -459,6 +506,7 @@ const schema = defineSchema({
     submittedDate: v.string(),
     reviewedDate: v.optional(v.string()),
     reviewNotes: v.optional(v.string()),
+    attachmentStorageIds: v.optional(v.array(v.id("_storage"))),
   })
     .index("by_userId", ["userId"])
     .index("by_propertyId", ["propertyId"])
@@ -642,6 +690,319 @@ const schema = defineSchema({
     .index("by_assignedToUserId", ["assignedToUserId"])
     .index("by_status", ["status"])
     .index("by_propertyId", ["propertyId"]),
+
+  // ========== AI ASSISTANT ==========
+  aiAssistantMessages: defineTable({
+    userId: v.id("users"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    timestamp: v.number(),
+    actionTaken: v.optional(v.string()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_timestamp", ["userId", "timestamp"]),
+
+  // ========== AUTOMATION RULES ==========
+  automationRules: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    isActive: v.boolean(),
+    trigger: v.union(
+      v.literal("task_created"),
+      v.literal("task_status_changed"),
+      v.literal("lease_expiring"),
+      v.literal("rent_overdue"),
+      v.literal("shift_no_show"),
+      v.literal("maintenance_request"),
+      v.literal("hoa_violation_created"),
+      v.literal("amenity_booking_created"),
+      v.literal("new_resident"),
+      v.literal("schedule"),
+    ),
+    conditions: v.array(
+      v.object({
+        field: v.string(),
+        operator: v.union(
+          v.literal("equals"),
+          v.literal("not_equals"),
+          v.literal("contains"),
+          v.literal("greater_than"),
+          v.literal("less_than"),
+          v.literal("days_before"),
+          v.literal("days_after"),
+        ),
+        value: v.string(),
+      }),
+    ),
+    actions: v.array(
+      v.object({
+        type: v.union(
+          v.literal("create_task"),
+          v.literal("assign_staff"),
+          v.literal("update_status"),
+          v.literal("send_notification"),
+          v.literal("escalate_priority"),
+          v.literal("add_note"),
+        ),
+        config: v.string(),
+      }),
+    ),
+    cronExpression: v.optional(v.string()),
+    lastRunAt: v.optional(v.number()),
+    runCount: v.optional(v.number()),
+    propertyId: v.optional(v.id("properties")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_trigger", ["trigger"])
+    .index("by_isActive", ["isActive"])
+    .index("by_userId_isActive", ["userId", "isActive"]),
+
+  automationLogs: defineTable({
+    userId: v.id("users"),
+    ruleId: v.id("automationRules"),
+    ruleName: v.string(),
+    trigger: v.string(),
+    status: v.union(
+      v.literal("success"),
+      v.literal("failed"),
+      v.literal("skipped"),
+    ),
+    actionsExecuted: v.number(),
+    details: v.optional(v.string()),
+    executedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_ruleId", ["ruleId"])
+    .index("by_userId_executedAt", ["userId", "executedAt"]),
+
+  // ========== ACCOUNTING / BOOKKEEPING ==========
+  bookkeepingEntries: defineTable({
+    userId: v.id("users"),
+    propertyId: v.optional(v.id("properties")),
+    date: v.string(),
+    type: v.union(v.literal("income"), v.literal("expense"), v.literal("transfer")),
+    category: v.string(),
+    amountCents: v.number(),
+    description: v.optional(v.string()),
+    reference: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_date", ["userId", "date"])
+    .index("by_userId_type", ["userId", "type"]),
+
+  // ========== RENT COLLECTION / PAYMENT PROCESSING ==========
+  rentInvoices: defineTable({
+    userId: v.id("users"),
+    residentId: v.optional(v.id("residents")),
+    propertyId: v.optional(v.id("properties")),
+    leaseId: v.optional(v.id("leaseAgreements")),
+    period: v.string(),
+    dueDate: v.string(),
+    amountCents: v.number(),
+    paidCents: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("partial"),
+      v.literal("paid"),
+      v.literal("overdue"),
+    ),
+    paymentMethod: v.optional(
+      v.union(
+        v.literal("card"),
+        v.literal("ach"),
+        v.literal("cash"),
+        v.literal("check"),
+        v.literal("other"),
+      ),
+    ),
+    paidAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_status", ["userId", "status"])
+    .index("by_userId_dueDate", ["userId", "dueDate"])
+    .index("by_userId_residentId", ["userId", "residentId"]),
+
+  // ========== TENANT SCREENING ==========
+  tenantScreenings: defineTable({
+    userId: v.id("users"),
+    applicantName: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    propertyId: v.optional(v.id("properties")),
+    provider: v.union(
+      v.literal("transunion"),
+      v.literal("experian"),
+      v.literal("checkr"),
+      v.literal("other"),
+    ),
+    status: v.union(
+      v.literal("requested"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    result: v.optional(v.union(v.literal("pass"), v.literal("review"), v.literal("decline"))),
+    score: v.optional(v.number()),
+    externalReference: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_status", ["userId", "status"])
+    .index("by_userId_provider", ["userId", "provider"]),
+
+  // ========== LEASE MANAGEMENT / ESIGN ==========
+  leaseAgreements: defineTable({
+    userId: v.id("users"),
+    residentId: v.optional(v.id("residents")),
+    propertyId: v.optional(v.id("properties")),
+    unit: v.optional(v.string()),
+    startDate: v.string(),
+    endDate: v.string(),
+    rentCents: v.number(),
+    depositCents: v.optional(v.number()),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("sent"),
+      v.literal("signed"),
+      v.literal("active"),
+      v.literal("expired"),
+      v.literal("terminated"),
+    ),
+    esignProvider: v.union(
+      v.literal("docusign"),
+      v.literal("hellosign"),
+      v.literal("internal"),
+      v.literal("none"),
+    ),
+    externalDocumentId: v.optional(v.string()),
+    signedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_status", ["userId", "status"])
+    .index("by_userId_endDate", ["userId", "endDate"])
+    .index("by_userId_residentId", ["userId", "residentId"]),
+
+  leaseDocuments: defineTable({
+    userId: v.id("users"),
+    leaseId: v.id("leaseAgreements"),
+    fileName: v.string(),
+    storageId: v.id("_storage"),
+    uploadedAt: v.number(),
+    uploadedBy: v.optional(v.string()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_leaseId", ["leaseId"]),
+
+  leaseRenewals: defineTable({
+    userId: v.id("users"),
+    leaseId: v.id("leaseAgreements"),
+    currentEndDate: v.string(),
+    proposedEndDate: v.string(),
+    proposedRentCents: v.optional(v.number()),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("sent"),
+      v.literal("approved"),
+      v.literal("declined"),
+      v.literal("expired"),
+    ),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_leaseId", ["leaseId"])
+    .index("by_userId_status", ["userId", "status"]),
+
+  tenantPortalAnnouncements: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    body: v.string(),
+    audience: v.union(v.literal("all"), v.literal("active"), v.literal("pending")),
+    createdAt: v.number(),
+    publishedAt: v.optional(v.number()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_createdAt", ["userId", "createdAt"]),
+
+  // ========== PMS INTEGRATIONS ==========
+  integrationConnections: defineTable({
+    userId: v.id("users"),
+    provider: v.union(
+      v.literal("yardi"),
+      v.literal("quickbooks"),
+      v.literal("docusign"),
+      v.literal("hellosign"),
+      v.literal("appfolio"),
+      v.literal("buildium"),
+      v.literal("rentmanager"),
+      v.literal("other"),
+    ),
+    status: v.union(
+      v.literal("connected"),
+      v.literal("disconnected"),
+      v.literal("error"),
+      v.literal("pending"),
+    ),
+    accountLabel: v.optional(v.string()),
+    externalAccountId: v.optional(v.string()),
+    metadata: v.optional(v.string()),
+    lastSyncedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_provider", ["userId", "provider"])
+    .index("by_userId_status", ["userId", "status"]),
+
+  integrationOAuthStates: defineTable({
+    state: v.string(),
+    userId: v.id("users"),
+    provider: v.string(),
+    expiresAt: v.number(),
+    redirectPath: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_state", ["state"])
+    .index("by_userId", ["userId"]),
+
+  integrationAuthTokens: defineTable({
+    userId: v.id("users"),
+    provider: v.string(),
+    accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    tokenType: v.optional(v.string()),
+    scope: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    externalAccountId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_provider", ["userId", "provider"])
+    .index("by_provider", ["provider"]),
+
+  integrationWebhookEvents: defineTable({
+    provider: v.string(),
+    eventType: v.optional(v.string()),
+    externalAccountId: v.optional(v.string()),
+    status: v.union(v.literal("received"), v.literal("processed"), v.literal("ignored"), v.literal("failed")),
+    payload: v.optional(v.string()),
+    error: v.optional(v.string()),
+    receivedAt: v.number(),
+  })
+    .index("by_provider", ["provider"])
+    .index("by_provider_receivedAt", ["provider", "receivedAt"]),
 
   // ========== APP SETTINGS (key-value store) ==========
   appSettings: defineTable({

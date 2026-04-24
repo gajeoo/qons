@@ -34,4 +34,5 @@ VITE_IS_PREVIEW=true
 - Required for app bootstrap/auth: VITE_CONVEX_URL, SITE_URL, CONVEX_SITE_URL
 - Optional: Stripe and PayPal keys only if you want payment UI active.
 - Convex backend secrets are NOT Vercel vars; set those with npx convex env set.
+- PayPal backend vars if using Convex env instead of the admin UI: PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_PLAN_MONTHLY, PAYPAL_PLAN_ANNUAL, PAYPAL_MODE.
 - Any env change in Vercel requires a redeploy.

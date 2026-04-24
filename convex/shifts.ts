@@ -246,7 +246,7 @@ export const aiSchedule = mutation({
     const ownerUserId = context.ownerUserId;
     const targetDate = args.date || new Date().toISOString().split("T")[0];
     const dayOfWeek = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][
-      new Date(targetDate + "T12:00:00").getDay()
+      new Date(`${targetDate}T12:00:00`).getDay()
     ] as string;
 
     // Get open shifts for this date
@@ -343,7 +343,7 @@ export const findCoverage = mutation({
     if (!shift || shift.userId !== ownerUserId) throw new Error("Not found");
 
     const dayOfWeek = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][
-      new Date(shift.date + "T12:00:00").getDay()
+      new Date(`${shift.date}T12:00:00`).getDay()
     ] as string;
 
     // Get all staff scheduled for this date

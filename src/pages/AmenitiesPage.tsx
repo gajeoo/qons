@@ -54,7 +54,7 @@ function AmenitiesPageInner() {
       await createAmenity({
         propertyId: amenityForm.propertyId as Id<"properties">,
         name: amenityForm.name, type: amenityForm.type,
-        capacity: parseInt(amenityForm.capacity) || 10,
+        capacity: parseInt(amenityForm.capacity, 10) || 10,
         requiresApproval: amenityForm.requiresApproval,
         rules: amenityForm.rules || undefined,
       });
@@ -71,7 +71,7 @@ function AmenitiesPageInner() {
         residentName: bookingForm.residentName, residentEmail: bookingForm.residentEmail,
         residentUnit: bookingForm.residentUnit || undefined, date: bookingForm.date,
         startTime: bookingForm.startTime, endTime: bookingForm.endTime,
-        guestCount: parseInt(bookingForm.guestCount) || undefined,
+        guestCount: parseInt(bookingForm.guestCount, 10) || undefined,
         notes: bookingForm.notes || undefined,
       });
       toast.success("Booking created");

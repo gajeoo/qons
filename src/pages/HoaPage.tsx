@@ -1,39 +1,70 @@
 import { useMutation, useQuery } from "convex/react";
 import {
-  AlertTriangle, BadgeDollarSign, FileText, Landmark, Megaphone, MessageSquare, Plus, PlusCircle, Vote,
+  AlertTriangle, BadgeDollarSign, CalendarDays, FileText, Landmark, Megaphone, MessageSquare, Plus, PlusCircle, Vote,
 } from "lucide-react";
 import { useState } from "react";
+import { ChatWidget } from "@/components/ChatWidget";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
 import { FeatureGate } from "@/components/FeatureGate";
 
+const violationNoticeTemplateDefaults = {
+  courtesy_warning: {
+    subject: "Courtesy Warning",
+    message: "This is a courtesy reminder regarding a reported HOA violation. Please resolve the issue promptly.",
+  },
+  fine_notice: {
+    subject: "Fine Notice",
+    message: "This notice confirms a fine has been issued for an unresolved HOA violation. Please review the charge and remediation steps.",
+  },
+  hearing_notice: {
+    subject: "Hearing Notice",
+    message: "A board hearing has been scheduled regarding this HOA violation. Please review the matter and prepare any supporting information.",
+  },
+  final_notice: {
+    subject: "Final Notice",
+    message: "This is the final notice before escalation for the outstanding HOA violation. Immediate action is required.",
+  },
+} as const;
+
+type ViolationNoticeTemplate = keyof typeof violationNoticeTemplateDefaults;
+
 function HoaPageInner() {
+  const user = useQuery(api.auth.currentUser);
   const properties = useQuery(api.properties.list) || [];
   const violations = useQuery(api.hoa.listViolations, {}) || [];
   const dues = useQuery(api.hoa.listDues, {}) || [];
+  const dueSummary = useQuery(api.hoa.getDueSummary);
   const votes = useQuery(api.hoa.listVotes, {}) || [];
+  const meetings = useQuery(api.hoa.listMeetings, {}) || [];
   const arcRequests = useQuery(api.hoa.listArcRequests, {}) || [];
   const messages = useQuery(api.hoa.listMessages, {}) || [];
   const reserveFunds = useQuery(api.reserveFund.list, {}) || [];
   const reserveStats = useQuery(api.reserveFund.getStats);
 
   const createViolation = useMutation(api.hoa.createViolation);
+  const generateAttachmentUploadUrl = useMutation(api.hoa.generateAttachmentUploadUrl);
   const updateViolation = useMutation(api.hoa.updateViolation);
+  const sendViolationNotice = useMutation(api.hoa.sendViolationNotice);
   const createDue = useMutation(api.hoa.createDue);
   const updateDue = useMutation(api.hoa.updateDue);
   const createVoteMut = useMutation(api.hoa.createVote);
   const closeVoteMut = useMutation(api.hoa.closeVote);
+  const createMeetingMut = useMutation(api.hoa.createMeeting);
+  const updateMeetingMut = useMutation(api.hoa.updateMeeting);
   const createArcReq = useMutation(api.hoa.createArcRequest);
   const createReserveFund = useMutation(api.reserveFund.create);
   const addContribution = useMutation(api.reserveFund.addContribution);
@@ -41,19 +72,72 @@ function HoaPageInner() {
   const updateArcReq = useMutation(api.hoa.updateArcRequest);
   const sendMsg = useMutation(api.hoa.sendMessage);
   const removeMsg = useMutation(api.hoa.removeMessage);
+  const { isSubAccount, isWorker } = useFeatureAccess();
 
   const [activeDialog, setActiveDialog] = useState<string | null>(null);
+  const [selectedViolationId, setSelectedViolationId] = useState<Id<"hoaViolations"> | null>(null);
   const getPropertyName = (id: Id<"properties">) => properties.find((p) => p._id === id)?.name || "";
 
   // === VIOLATIONS ===
-  const [vForm, setVForm] = useState({ propertyId: "", unit: "", residentName: "", type: "noise" as const, description: "", fineAmount: "" });
+  const [vForm, setVForm] = useState({ propertyId: "", unit: "", residentName: "", type: "noise" as const, description: "", fineAmount: "", attachmentStorageIds: [] as Id<"_storage">[] });
+  const [uploadingViolationAttachment, setUploadingViolationAttachment] = useState(false);
+
+  const uploadHoaAttachment = async (file: File) => {
+    const uploadUrl = await generateAttachmentUploadUrl({});
+    const response = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    if (!response.ok) throw new Error("Upload failed");
+    const { storageId } = await response.json();
+    return storageId as Id<"_storage">;
+  };
+
+  const handleUploadViolationAttachment = async (file: File) => {
+    setUploadingViolationAttachment(true);
+    try {
+      const storageId = await uploadHoaAttachment(file);
+      setVForm({ ...vForm, attachmentStorageIds: [...vForm.attachmentStorageIds, storageId] });
+      toast.success("Violation attachment uploaded");
+    } catch (e: any) {
+      toast.error(e.message || "Upload failed");
+    } finally {
+      setUploadingViolationAttachment(false);
+    }
+  };
+
   const handleCreateViolation = async () => {
     if (!vForm.propertyId || !vForm.unit || !vForm.residentName || !vForm.description) { toast.error("Fill required fields"); return; }
     await createViolation({
       propertyId: vForm.propertyId as Id<"properties">, unit: vForm.unit, residentName: vForm.residentName,
       type: vForm.type, description: vForm.description, fineAmount: vForm.fineAmount ? parseFloat(vForm.fineAmount) : undefined,
+      attachmentStorageIds: vForm.attachmentStorageIds,
     });
     toast.success("Violation reported"); setActiveDialog(null);
+  };
+
+  const [noticeForm, setNoticeForm] = useState({
+    template: "courtesy_warning" as ViolationNoticeTemplate,
+    deliveryMethod: "email" as const,
+    subject: "Courtesy Warning",
+    message: "This is a courtesy notice regarding a reported HOA violation. Please review and correct the issue promptly.",
+  });
+  const handleSendViolationNotice = async () => {
+    if (!selectedViolationId || !noticeForm.subject || !noticeForm.message) {
+      toast.error("Fill required fields");
+      return;
+    }
+    await sendViolationNotice({
+      id: selectedViolationId,
+      template: noticeForm.template,
+      deliveryMethod: noticeForm.deliveryMethod,
+      subject: noticeForm.subject,
+      message: noticeForm.message,
+    });
+    toast.success("Violation notice logged");
+    setActiveDialog(null);
+    setSelectedViolationId(null);
   };
 
   // === DUES ===
@@ -78,13 +162,57 @@ function HoaPageInner() {
     toast.success("Vote created"); setActiveDialog(null);
   };
 
+  // === MEETINGS ===
+  const [meetingForm, setMeetingForm] = useState({
+    propertyId: "",
+    title: "",
+    description: "",
+    scheduledDate: "",
+    scheduledTime: "",
+    location: "",
+    agenda: "Budget review, Vendor updates",
+  });
+  const handleCreateMeeting = async () => {
+    if (!meetingForm.propertyId || !meetingForm.title || !meetingForm.scheduledDate) {
+      toast.error("Fill required fields");
+      return;
+    }
+    await createMeetingMut({
+      propertyId: meetingForm.propertyId as Id<"properties">,
+      title: meetingForm.title,
+      description: meetingForm.description || undefined,
+      scheduledDate: meetingForm.scheduledDate,
+      scheduledTime: meetingForm.scheduledTime || undefined,
+      location: meetingForm.location || undefined,
+      agenda: meetingForm.agenda.split(",").map((item) => item.trim()).filter(Boolean),
+    });
+    toast.success("Meeting scheduled");
+    setActiveDialog(null);
+  };
+
   // === ARC ===
-  const [arcForm, setArcForm] = useState({ propertyId: "", unit: "", residentName: "", requestType: "exterior_modification" as const, description: "" });
+  const [arcForm, setArcForm] = useState({ propertyId: "", unit: "", residentName: "", requestType: "exterior_modification" as const, description: "", attachmentStorageIds: [] as Id<"_storage">[] });
+  const [uploadingArcAttachment, setUploadingArcAttachment] = useState(false);
+
+  const handleUploadArcAttachment = async (file: File) => {
+    setUploadingArcAttachment(true);
+    try {
+      const storageId = await uploadHoaAttachment(file);
+      setArcForm({ ...arcForm, attachmentStorageIds: [...arcForm.attachmentStorageIds, storageId] });
+      toast.success("ARC attachment uploaded");
+    } catch (e: any) {
+      toast.error(e.message || "Upload failed");
+    } finally {
+      setUploadingArcAttachment(false);
+    }
+  };
+
   const handleCreateArc = async () => {
     if (!arcForm.propertyId || !arcForm.unit || !arcForm.residentName || !arcForm.description) { toast.error("Fill required fields"); return; }
     await createArcReq({
       propertyId: arcForm.propertyId as Id<"properties">, unit: arcForm.unit,
       residentName: arcForm.residentName, requestType: arcForm.requestType, description: arcForm.description,
+      attachmentStorageIds: arcForm.attachmentStorageIds,
     });
     toast.success("ARC request submitted"); setActiveDialog(null);
   };
@@ -129,12 +257,38 @@ function HoaPageInner() {
         <p className="text-muted-foreground">Violations, dues collection, board voting, ARC requests & resident messaging</p>
       </div>
 
+      {!isWorker && !isSubAccount && user?._id && (
+        <Card className="overflow-hidden border-sky-200/70 bg-gradient-to-br from-sky-50/80 via-background to-blue-50/50">
+          <CardContent className="p-4">
+            <ChatWidget
+              layout="embedded"
+              source="dashboard"
+              title="HOA Assistant"
+              subtitle="Use it for violations, dues, meetings, ARC requests, and resident communications"
+              inputPlaceholder="Ask about HOA notices, dues workflows, meetings, ARC reviews..."
+              visitorId={`user_${user._id}`}
+              visitorName={user.name ?? undefined}
+              visitorEmail={user.email ?? undefined}
+              metadata={JSON.stringify({ page: "hoa" })}
+              suggestedPrompts={[
+                "Create task: Call residents with overdue dues",
+                "How should I handle overdue dues?",
+                "Draft a violation follow-up plan",
+                "What should go in the next board meeting agenda?",
+                "How do I review an ARC request fairly?",
+              ]}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Quick Stats */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
         {[
           { label: "Violations", value: violations.filter((v) => v.status !== "resolved").length, icon: AlertTriangle, color: "text-red-500" },
           { label: "Pending Dues", value: dues.filter((d) => d.status === "pending" || d.status === "overdue").length, icon: BadgeDollarSign, color: "text-amber-500" },
           { label: "Active Votes", value: votes.filter((v) => v.status === "open").length, icon: Vote, color: "text-blue-500" },
+          { label: "Meetings", value: meetings.filter((m) => m.status !== "cancelled").length, icon: CalendarDays, color: "text-sky-500" },
           { label: "ARC Requests", value: arcRequests.filter((r) => r.status === "submitted" || r.status === "under_review").length, icon: FileText, color: "text-purple-500" },
           { label: "Messages", value: messages.length, icon: MessageSquare, color: "text-teal" },
         ].map((s) => (
@@ -155,6 +309,7 @@ function HoaPageInner() {
           <TabsTrigger value="violations"><AlertTriangle className="size-3" /> Violations</TabsTrigger>
           <TabsTrigger value="dues"><BadgeDollarSign className="size-3" /> Dues</TabsTrigger>
           <TabsTrigger value="votes"><Vote className="size-3" /> Voting</TabsTrigger>
+          <TabsTrigger value="meetings"><CalendarDays className="size-3" /> Meetings</TabsTrigger>
           <TabsTrigger value="arc"><FileText className="size-3" /> ARC</TabsTrigger>
           <TabsTrigger value="messages"><Megaphone className="size-3" /> Messages</TabsTrigger>
           <TabsTrigger value="reserves"><Landmark className="size-3" /> Reserve Funds</TabsTrigger>
@@ -173,9 +328,32 @@ function HoaPageInner() {
                   <p className="text-sm text-muted-foreground">{getPropertyName(v.propertyId)} · {v.type} · {v.reportedDate}</p>
                   <p className="text-sm">{v.description}</p>
                   {v.fineAmount != null && <p className="text-sm font-medium text-red-600">Fine: ${v.fineAmount}</p>}
+                  {v.attachmentUrls && v.attachmentUrls.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {v.attachmentUrls.map((url: string, index: number) => (
+                        <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="text-xs text-teal underline">Attachment {index + 1}</a>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge className={violationStatusColors[v.status]}>{v.status.replace("_", " ")}</Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedViolationId(v._id);
+                      setNoticeForm({
+                        template: "courtesy_warning",
+                        deliveryMethod: "email",
+                        subject: `HOA Notice for Unit ${v.unit}`,
+                        message: `Hello ${v.residentName},\n\nThis notice concerns a ${v.type.replace(/_/g, " ")} violation reported for unit ${v.unit}. Please review the issue and respond or correct it as soon as possible.\n\nDetails: ${v.description}`,
+                      });
+                      setActiveDialog("violationNotice");
+                    }}
+                  >
+                    Send Notice
+                  </Button>
                   <Select value={v.status} onValueChange={(s: any) => updateViolation({ id: v._id, status: s }).then(() => toast.success("Updated"))}>
                     <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -185,6 +363,23 @@ function HoaPageInner() {
                     </SelectContent>
                   </Select>
                 </div>
+                {v.noticeHistory && v.noticeHistory.length > 0 && (
+                  <div className="mt-3 rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Notice History</p>
+                    <div className="space-y-2">
+                      {v.noticeHistory.slice().reverse().map((notice: any, index: number) => (
+                        <div key={`${notice.sentAt}-${index}`} className="rounded-md bg-background p-2 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium">{notice.template.replace(/_/g, " ")}</span>
+                            <span className="text-muted-foreground">{new Date(notice.sentAt).toLocaleString()} · {notice.deliveryMethod}</span>
+                          </div>
+                          <p className="mt-1 font-medium">{notice.subject}</p>
+                          <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{notice.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -193,6 +388,35 @@ function HoaPageInner() {
         {/* DUES */}
         <TabsContent value="dues" className="mt-4 space-y-3">
           <Button onClick={() => setActiveDialog("due")} className="bg-teal text-white hover:bg-teal/90" size="sm"><Plus className="size-4" /> Create Due</Button>
+          {dueSummary && (
+            <div className="grid gap-3 md:grid-cols-4">
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Pending</p><p className="text-xl font-bold text-amber-600">${(dueSummary.totalPending / 100).toLocaleString()}</p><p className="text-xs text-muted-foreground">{dueSummary.pendingCount} invoice(s)</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Overdue</p><p className="text-xl font-bold text-red-600">${(dueSummary.totalOverdue / 100).toLocaleString()}</p><p className="text-xs text-muted-foreground">{dueSummary.overdueCount} account(s)</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Collected</p><p className="text-xl font-bold text-green-600">${(dueSummary.totalCollected / 100).toLocaleString()}</p><p className="text-xs text-muted-foreground">{dueSummary.collectedCount} payment(s)</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Collection Rate</p><p className="text-xl font-bold text-blue-600">{dueSummary.totalCollected + dueSummary.totalPending + dueSummary.totalOverdue > 0 ? Math.round((dueSummary.totalCollected / (dueSummary.totalCollected + dueSummary.totalPending + dueSummary.totalOverdue)) * 100) : 0}%</p><p className="text-xs text-muted-foreground">paid vs open balances</p></CardContent></Card>
+            </div>
+          )}
+          {dueSummary && dueSummary.overdueByProperty.length > 0 && (
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div>
+                  <p className="font-medium">Overdue by Property</p>
+                  <p className="text-xs text-muted-foreground">Identify communities with the highest outstanding HOA balances</p>
+                </div>
+                <div className="space-y-2">
+                  {dueSummary.overdueByProperty.slice(0, 5).map((item) => (
+                    <div key={item.propertyId} className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <p className="text-sm font-medium">{getPropertyName(item.propertyId as Id<"properties">)}</p>
+                        <p className="text-xs text-muted-foreground">{item.overdueCount} overdue account(s)</p>
+                      </div>
+                      <p className="text-sm font-semibold text-red-600">${(item.overdueAmount / 100).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
           {dues.length === 0 ? (
             <Card><CardContent className="p-8 text-center text-muted-foreground">No dues created</CardContent></Card>
           ) : dues.map((d) => (
@@ -246,7 +470,7 @@ function HoaPageInner() {
                           <span className="text-muted-foreground">{count} votes ({pct}%)</span>
                         </div>
                         <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-teal rounded-full" style={{ width: `${pct}%` }} />
+                          <Progress value={pct} className="h-full [&>*]:bg-teal" />
                         </div>
                       </div>
                     );
@@ -256,6 +480,94 @@ function HoaPageInner() {
               </CardContent>
             </Card>
           ))}
+        </TabsContent>
+
+        {/* MEETINGS */}
+        <TabsContent value="meetings" className="mt-4 space-y-3">
+          <Button onClick={() => setActiveDialog("meeting")} className="bg-teal text-white hover:bg-teal/90" size="sm"><Plus className="size-4" /> Schedule Meeting</Button>
+          {meetings.length === 0 ? (
+            <Card><CardContent className="p-8 text-center text-muted-foreground">No board meetings scheduled</CardContent></Card>
+          ) : meetings.map((meeting) => {
+            const meetingStatusColors: Record<string, string> = {
+              scheduled: "bg-blue-100 text-blue-700",
+              in_progress: "bg-amber-100 text-amber-700",
+              completed: "bg-green-100 text-green-700",
+              cancelled: "bg-gray-100 text-gray-600",
+            };
+
+            return (
+              <Card key={meeting._id}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{meeting.title}</p>
+                      <p className="text-sm text-muted-foreground">{getPropertyName(meeting.propertyId)} · {meeting.scheduledDate}{meeting.scheduledTime ? ` at ${meeting.scheduledTime}` : ""}{meeting.location ? ` · ${meeting.location}` : ""}</p>
+                      {meeting.description && <p className="text-sm mt-1">{meeting.description}</p>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={meetingStatusColors[meeting.status]}>{meeting.status.replace("_", " ")}</Badge>
+                      <Select value={meeting.status} onValueChange={(status: any) => updateMeetingMut({ id: meeting._id, status }).then(() => toast.success("Meeting updated"))}>
+                        <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[
+                            "scheduled",
+                            "in_progress",
+                            "completed",
+                            "cancelled",
+                          ].map((status) => (
+                            <SelectItem key={status} value={status}>{status.replace("_", " ")}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Agenda</p>
+                    <div className="flex flex-wrap gap-2">
+                      {meeting.agenda.map((item: string) => (
+                        <Badge key={item} variant="outline">{item}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Attendees</Label>
+                      <Input
+                        type="number"
+                        defaultValue={meeting.attendeeCount ?? ""}
+                        placeholder="0"
+                        onBlur={(e) => {
+                          const value = e.target.value.trim();
+                          if (!value) return;
+                          updateMeetingMut({ id: meeting._id, attendeeCount: Number(value) }).then(() => toast.success("Attendees updated"));
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Follow-up Actions</Label>
+                      <Input
+                        defaultValue={meeting.followUpActions?.join(", ") ?? ""}
+                        placeholder="Assign landscaping bid, Draft resident notice"
+                        onBlur={(e) => updateMeetingMut({
+                          id: meeting._id,
+                          followUpActions: e.target.value.split(",").map((item) => item.trim()).filter(Boolean),
+                        }).then(() => toast.success("Actions updated"))}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Meeting Minutes</Label>
+                    <Textarea
+                      defaultValue={meeting.minutes ?? ""}
+                      placeholder="Summarize decisions, motions, vendors, and next steps"
+                      rows={3}
+                      onBlur={(e) => updateMeetingMut({ id: meeting._id, minutes: e.target.value || undefined }).then(() => toast.success("Minutes saved"))}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </TabsContent>
 
         {/* ARC REQUESTS */}
@@ -276,6 +588,13 @@ function HoaPageInner() {
                     <p className="text-sm text-muted-foreground">{getPropertyName(r.propertyId)} · {r.requestType.replace(/_/g, " ")} · {r.submittedDate}</p>
                     <p className="text-sm">{r.description}</p>
                     {r.reviewNotes && <p className="text-sm text-blue-600">Review: {r.reviewNotes}</p>}
+                    {r.attachmentUrls && r.attachmentUrls.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {r.attachmentUrls.map((url: string, index: number) => (
+                          <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="text-xs text-teal underline">Attachment {index + 1}</a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className={arcColors[r.status]}>{r.status.replace("_", " ")}</Badge>
@@ -368,7 +687,7 @@ function HoaPageInner() {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-                      <div className="bg-blue-600 h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+                      <Progress value={Math.min(pct, 100)} className="h-full [&>*]:bg-blue-600" />
                     </div>
                     <span className="text-sm font-medium whitespace-nowrap">{pct}% — ${(fund.currentAmount / 100).toLocaleString()} / ${(fund.targetAmount / 100).toLocaleString()}</span>
                   </div>
@@ -402,9 +721,71 @@ function HoaPageInner() {
               <div><Label>Fine Amount ($)</Label><Input type="number" value={vForm.fineAmount} onChange={(e) => setVForm({ ...vForm, fineAmount: e.target.value })} /></div>
             </div>
             <div><Label>Description *</Label><Textarea value={vForm.description} onChange={(e) => setVForm({ ...vForm, description: e.target.value })} /></div>
+            <div>
+              <Label>Attachments (images/pdf)</Label>
+              <Input
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void handleUploadViolationAttachment(file);
+                  }
+                }}
+                disabled={uploadingViolationAttachment}
+              />
+              {vForm.attachmentStorageIds.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">{vForm.attachmentStorageIds.length} attachment(s) uploaded</p>
+              )}
+            </div>
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setActiveDialog(null)}>Cancel</Button>
-              <Button onClick={handleCreateViolation} className="bg-teal text-white hover:bg-teal/90">Report</Button>
+              <Button onClick={handleCreateViolation} className="bg-teal text-white hover:bg-teal/90" disabled={uploadingViolationAttachment}>Report</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Violation Notice */}
+      <Dialog open={activeDialog === "violationNotice"} onOpenChange={() => { setActiveDialog(null); setSelectedViolationId(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Send HOA Violation Notice</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Template</Label>
+                <Select value={noticeForm.template} onValueChange={(value: ViolationNoticeTemplate) => {
+                  setNoticeForm({
+                    ...noticeForm,
+                    template: value,
+                    subject: violationNoticeTemplateDefaults[value].subject,
+                    message: violationNoticeTemplateDefaults[value].message,
+                  });
+                }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[
+                      "courtesy_warning",
+                      "fine_notice",
+                      "hearing_notice",
+                      "final_notice",
+                    ].map((template) => <SelectItem key={template} value={template}>{template.replace(/_/g, " ")}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Delivery</Label>
+                <Select value={noticeForm.deliveryMethod} onValueChange={(value: any) => setNoticeForm({ ...noticeForm, deliveryMethod: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["email", "letter", "portal"].map((method) => <SelectItem key={method} value={method}>{method}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div><Label>Subject</Label><Input value={noticeForm.subject} onChange={(e) => setNoticeForm({ ...noticeForm, subject: e.target.value })} /></div>
+            <div><Label>Message</Label><Textarea rows={6} value={noticeForm.message} onChange={(e) => setNoticeForm({ ...noticeForm, message: e.target.value })} /></div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => { setActiveDialog(null); setSelectedViolationId(null); }}>Cancel</Button>
+              <Button onClick={handleSendViolationNotice} className="bg-teal text-white hover:bg-teal/90">Log Notice</Button>
             </div>
           </div>
         </DialogContent>
@@ -451,6 +832,28 @@ function HoaPageInner() {
         </DialogContent>
       </Dialog>
 
+      {/* Meeting */}
+      <Dialog open={activeDialog === "meeting"} onOpenChange={() => setActiveDialog(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Schedule Board Meeting</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Property *</Label><PropertySelect value={meetingForm.propertyId} onChange={(v) => setMeetingForm({ ...meetingForm, propertyId: v })} /></div>
+            <div><Label>Meeting Title *</Label><Input value={meetingForm.title} onChange={(e) => setMeetingForm({ ...meetingForm, title: e.target.value })} placeholder="Quarterly board review" /></div>
+            <div><Label>Description</Label><Textarea value={meetingForm.description} onChange={(e) => setMeetingForm({ ...meetingForm, description: e.target.value })} rows={3} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Date *</Label><Input type="date" value={meetingForm.scheduledDate} onChange={(e) => setMeetingForm({ ...meetingForm, scheduledDate: e.target.value })} /></div>
+              <div><Label>Time</Label><Input type="time" value={meetingForm.scheduledTime} onChange={(e) => setMeetingForm({ ...meetingForm, scheduledTime: e.target.value })} /></div>
+            </div>
+            <div><Label>Location</Label><Input value={meetingForm.location} onChange={(e) => setMeetingForm({ ...meetingForm, location: e.target.value })} placeholder="Clubhouse conference room" /></div>
+            <div><Label>Agenda Items</Label><Input value={meetingForm.agenda} onChange={(e) => setMeetingForm({ ...meetingForm, agenda: e.target.value })} placeholder="Budget review, Vendor selection, Resident appeals" /></div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setActiveDialog(null)}>Cancel</Button>
+              <Button onClick={handleCreateMeeting} className="bg-teal text-white hover:bg-teal/90">Schedule</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ARC Request */}
       <Dialog open={activeDialog === "arc"} onOpenChange={() => setActiveDialog(null)}>
         <DialogContent className="max-w-md">
@@ -468,9 +871,26 @@ function HoaPageInner() {
               </Select>
             </div>
             <div><Label>Description *</Label><Textarea value={arcForm.description} onChange={(e) => setArcForm({ ...arcForm, description: e.target.value })} /></div>
+            <div>
+              <Label>Attachments (images/pdf)</Label>
+              <Input
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void handleUploadArcAttachment(file);
+                  }
+                }}
+                disabled={uploadingArcAttachment}
+              />
+              {arcForm.attachmentStorageIds.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">{arcForm.attachmentStorageIds.length} attachment(s) uploaded</p>
+              )}
+            </div>
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setActiveDialog(null)}>Cancel</Button>
-              <Button onClick={handleCreateArc} className="bg-teal text-white hover:bg-teal/90">Submit</Button>
+              <Button onClick={handleCreateArc} className="bg-teal text-white hover:bg-teal/90" disabled={uploadingArcAttachment}>Submit</Button>
             </div>
           </div>
         </DialogContent>
@@ -511,14 +931,20 @@ function HoaPageInner() {
           <DialogHeader><DialogTitle>Create Reserve Fund</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Property *</Label>
-              <Select onValueChange={(v) => (document.getElementById("rf-prop") as any).__val = v}>
+              <Select onValueChange={(v) => {
+                const el = document.getElementById("rf-prop") as any;
+                if (el) el.__val = v;
+              }}>
                 <SelectTrigger id="rf-prop"><SelectValue placeholder="Select property" /></SelectTrigger>
                 <SelectContent>{properties.map((p) => <SelectItem key={p._id} value={p._id}>{p.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div><Label>Fund Name *</Label><Input id="rf-name" placeholder="e.g. Roof Replacement 2027" /></div>
             <div><Label>Category</Label>
-              <Select defaultValue="general" onValueChange={(v) => (document.getElementById("rf-cat") as any).__val = v}>
+              <Select defaultValue="general" onValueChange={(v) => {
+                const el = document.getElementById("rf-cat") as any;
+                if (el) el.__val = v;
+              }}>
                 <SelectTrigger id="rf-cat"><SelectValue /></SelectTrigger>
                 <SelectContent>{["roof","elevator","hvac","parking","landscaping","pool","general","emergency","other"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>

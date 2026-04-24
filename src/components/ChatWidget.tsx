@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
-import { Bot, MessageCircle, Send, User, X, Shield } from "lucide-react";
+import { Bot, MessageCircle, Send, Shield, User, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "../../convex/_generated/api";
@@ -18,14 +18,18 @@ function getVisitorId(): string {
 function formatMessage(text: string): string {
   return text
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="underline text-sky-400 hover:text-sky-300">$1</a>')
+    .replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      '<a href="$2" class="underline text-sky-400 hover:text-sky-300">$1</a>',
+    )
     .replace(/\n/g, "<br />");
 }
 
 export function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
-  const [conversationId, setConversationId] = useState<Id<"chatConversations"> | null>(null);
+  const [conversationId, setConversationId] =
+    useState<Id<"chatConversations"> | null>(null);
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -49,7 +53,7 @@ export function ChatWidget() {
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, []);
 
   // Focus input when opened
   useEffect(() => {
@@ -76,17 +80,23 @@ export function ChatWidget() {
 
   const getRoleIcon = (role: string) => {
     switch (role) {
-      case "visitor": return <User className="size-3" />;
-      case "admin": return <Shield className="size-3" />;
-      default: return <Bot className="size-3" />;
+      case "visitor":
+        return <User className="size-3" />;
+      case "admin":
+        return <Shield className="size-3" />;
+      default:
+        return <Bot className="size-3" />;
     }
   };
 
   const getRoleBubbleStyle = (role: string) => {
     switch (role) {
-      case "visitor": return "bg-sky-500 text-white rounded-br-md";
-      case "admin": return "bg-emerald-500/10 text-foreground border border-emerald-500/30 rounded-bl-md";
-      default: return "bg-muted text-foreground rounded-bl-md";
+      case "visitor":
+        return "bg-sky-500 text-white rounded-br-md";
+      case "admin":
+        return "bg-emerald-500/10 text-foreground border border-emerald-500/30 rounded-bl-md";
+      default:
+        return "bg-muted text-foreground rounded-bl-md";
     }
   };
 
@@ -96,10 +106,15 @@ export function ChatWidget() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
+          type="button"
+          aria-label="Open chat assistant"
+          title="Open chat assistant"
           className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-sky-500 px-5 py-3 text-white shadow-lg shadow-sky-500/25 hover:bg-sky-600 transition-all hover:scale-105 active:scale-95"
         >
           <MessageCircle className="size-5" />
-          <span className="text-sm font-medium hidden sm:inline">Chat with us</span>
+          <span className="text-sm font-medium hidden sm:inline">
+            Chat with us
+          </span>
         </button>
       )}
 
@@ -120,6 +135,9 @@ export function ChatWidget() {
             </div>
             <button
               onClick={() => setIsOpen(false)}
+              type="button"
+              aria-label="Close chat assistant"
+              title="Close chat assistant"
               className="size-8 rounded-full hover:bg-white/20 flex items-center justify-center transition-colors"
             >
               <X className="size-4" />
@@ -128,7 +146,7 @@ export function ChatWidget() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {messages?.map((msg) => (
+            {messages?.map(msg => (
               <div
                 key={msg._id}
                 className={`flex ${msg.role === "visitor" ? "justify-end" : "justify-start"}`}
@@ -137,12 +155,18 @@ export function ChatWidget() {
                   {msg.role !== "visitor" && (
                     <div className="flex items-center gap-1.5 mb-1 text-[10px] text-muted-foreground">
                       {getRoleIcon(msg.role)}
-                      <span>{msg.role === "admin" ? (msg.senderName || "Admin") : "AI Assistant"}</span>
+                      <span>
+                        {msg.role === "admin"
+                          ? msg.senderName || "Admin"
+                          : "AI Assistant"}
+                      </span>
                     </div>
                   )}
                   <div
                     className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${getRoleBubbleStyle(msg.role)}`}
-                    dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }}
+                    dangerouslySetInnerHTML={{
+                      __html: formatMessage(msg.content),
+                    }}
                   />
                 </div>
               </div>
@@ -151,9 +175,9 @@ export function ChatWidget() {
               <div className="flex justify-start">
                 <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
                   <div className="flex gap-1">
-                    <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
+                    <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
+                    <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
                   </div>
                 </div>
               </div>
@@ -164,14 +188,17 @@ export function ChatWidget() {
           {/* Input */}
           <div className="p-3 border-t bg-muted/30">
             <form
-              onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+              onSubmit={e => {
+                e.preventDefault();
+                handleSend();
+              }}
               className="flex gap-2"
             >
               <input
                 ref={inputRef}
                 type="text"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={e => setInput(e.target.value)}
                 placeholder="Type your message..."
                 className="flex-1 rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all"
               />

@@ -139,7 +139,7 @@ export const generate = mutation({
 
     // Get all approved time entries in this period
     const startTs = new Date(args.periodStart).getTime();
-    const endTs = new Date(args.periodEnd + "T23:59:59").getTime();
+    const endTs = new Date(`${args.periodEnd}T23:59:59`).getTime();
 
     const allEntries = await ctx.db
       .query("timeEntries")

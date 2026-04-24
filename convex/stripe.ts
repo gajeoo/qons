@@ -258,6 +258,8 @@ export const handleWebhook = internalAction({
               stripeCustomerId: session.customer,
               stripeSubscriptionId: sub.id,
               stripePriceId: sub.items.data[0]?.price.id ?? "",
+              billingProvider: "stripe",
+              billingCycle: "monthly",
               plan,
               status: sub.status as any,
               currentPeriodStart: sub.current_period_start * 1000,

@@ -25,7 +25,8 @@
       },
       "style": {
         "noNonNullAssertion": "off",
-        "useNodejsImportProtocol": "off"
+        "useNodejsImportProtocol": "off",
+        "noInlineStyles": "off"
       },
       "a11y": {
         "useSemanticElements": "off",

@@ -227,6 +227,17 @@ Each page in `src/pages/` uses the shared UI components from `src/components/ui/
 
 ## Features
 
+### AI Assistant (LLM)
+
+The authenticated AI assistant supports real LLM responses through Convex actions.
+
+Set these in Convex environment variables:
+
+- `OPENAI_API_KEY` (required)
+- `OPENAI_MODEL` (optional, defaults to `gpt-4o-mini`)
+
+If the key is missing, the assistant gracefully falls back to the built-in rules-based response engine.
+
 ### 🎨 Theming
 
 Full light/dark mode support with OKLCH colors and system preference detection:

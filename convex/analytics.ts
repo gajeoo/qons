@@ -27,6 +27,16 @@ export const getExecutiveDashboard = query({
     const payrolls = await ctx.db.query("payrollExports")
       .withIndex("by_userId", (q) => q.eq("userId", userId)).collect();
 
+    const bookkeepingEntries = await ctx.db
+      .query("bookkeepingEntries")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+
+    const rentInvoices = await ctx.db
+      .query("rentInvoices")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+
     const activeStaff = staff.filter((s) => s.status === "active");
     const activeProperties = properties.filter((p) => p.status === "active");
 
@@ -43,6 +53,27 @@ export const getExecutiveDashboard = query({
     const monthStart_ts = new Date(monthStart).getTime();
     const monthEntries = timeEntries.filter((e) => e.clockIn >= monthStart_ts);
     const totalHoursThisMonth = monthEntries.reduce((sum, e) => sum + (e.totalHours || 0), 0);
+
+    const currentMonthTag = monthStart.slice(0, 7);
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonthTag = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}`;
+
+    const revenueThisMonth = rentInvoices
+      .filter((i) => (i.period || "").startsWith(currentMonthTag))
+      .reduce((sum, i) => sum + (i.paidCents || 0), 0) / 100;
+    const expensesThisMonth = bookkeepingEntries
+      .filter((e) => (e.date || "").startsWith(currentMonthTag) && e.type === "expense")
+      .reduce((sum, e) => sum + e.amountCents, 0) / 100;
+
+    const revenuePrevMonth = rentInvoices
+      .filter((i) => (i.period || "").startsWith(prevMonthTag))
+      .reduce((sum, i) => sum + (i.paidCents || 0), 0) / 100;
+    const expensesPrevMonth = bookkeepingEntries
+      .filter((e) => (e.date || "").startsWith(prevMonthTag) && e.type === "expense")
+      .reduce((sum, e) => sum + e.amountCents, 0) / 100;
+
+    const noiThisMonth = revenueThisMonth - expensesThisMonth;
+    const noiPrevMonth = revenuePrevMonth - expensesPrevMonth;
 
     // Cost per building (this month)
     const totalPayroll = payrolls
@@ -62,6 +93,22 @@ export const getExecutiveDashboard = query({
         totalShifts: propShifts.length,
         filledShifts: filled.length,
         coverageRate: propShifts.length > 0 ? Math.round((filled.length / propShifts.length) * 100) : 100,
+      };
+    });
+
+    const propertyFinancials = properties.map((p) => {
+      const revenue = rentInvoices
+        .filter((i) => i.propertyId === p._id)
+        .reduce((sum, i) => sum + (i.paidCents || 0), 0) / 100;
+      const expenses = bookkeepingEntries
+        .filter((e) => e.propertyId === p._id && e.type === "expense")
+        .reduce((sum, e) => sum + e.amountCents, 0) / 100;
+      return {
+        propertyId: p._id,
+        propertyName: p.name,
+        revenue: Math.round(revenue * 100) / 100,
+        expenses: Math.round(expenses * 100) / 100,
+        noi: Math.round((revenue - expenses) * 100) / 100,
       };
     });
 
@@ -104,10 +151,68 @@ export const getExecutiveDashboard = query({
         totalPayrollThisMonth: Math.round(totalPayroll * 100) / 100,
         shiftsThisMonth: monthShifts.length,
         openShifts: monthShifts.filter((s) => s.status === "open").length,
+        revenueThisMonth: Math.round(revenueThisMonth * 100) / 100,
+        expensesThisMonth: Math.round(expensesThisMonth * 100) / 100,
+        noiThisMonth: Math.round(noiThisMonth * 100) / 100,
+      },
+      trendComparison: {
+        revenue: {
+          current: Math.round(revenueThisMonth * 100) / 100,
+          previous: Math.round(revenuePrevMonth * 100) / 100,
+          delta: Math.round((revenueThisMonth - revenuePrevMonth) * 100) / 100,
+        },
+        expenses: {
+          current: Math.round(expensesThisMonth * 100) / 100,
+          previous: Math.round(expensesPrevMonth * 100) / 100,
+          delta: Math.round((expensesThisMonth - expensesPrevMonth) * 100) / 100,
+        },
+        noi: {
+          current: Math.round(noiThisMonth * 100) / 100,
+          previous: Math.round(noiPrevMonth * 100) / 100,
+          delta: Math.round((noiThisMonth - noiPrevMonth) * 100) / 100,
+        },
       },
       propertyStats,
+      propertyFinancials,
       roleDistribution,
       weekTrend,
     };
+  },
+});
+
+export const getPropertyFinancials = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    const properties = await ctx.db
+      .query("properties")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+    const bookkeepingEntries = await ctx.db
+      .query("bookkeepingEntries")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+    const rentInvoices = await ctx.db
+      .query("rentInvoices")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+
+    return properties.map((p) => {
+      const revenue = rentInvoices
+        .filter((i) => i.propertyId === p._id)
+        .reduce((sum, i) => sum + (i.paidCents || 0), 0) / 100;
+      const expenses = bookkeepingEntries
+        .filter((e) => e.propertyId === p._id && e.type === "expense")
+        .reduce((sum, e) => sum + e.amountCents, 0) / 100;
+      return {
+        propertyId: p._id,
+        propertyName: p.name,
+        revenue: Math.round(revenue * 100) / 100,
+        expenses: Math.round(expenses * 100) / 100,
+        noi: Math.round((revenue - expenses) * 100) / 100,
+      };
+    });
   },
 });

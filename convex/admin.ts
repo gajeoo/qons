@@ -504,7 +504,23 @@ export const adminDeleteUser = mutation({
       .unique();
     if (onboarding) await ctx.db.delete(onboarding._id);
 
-    // Note: We don't delete the auth user record itself (Convex Auth manages that)
+    // Delete auth sessions for this user
+    const sessions = await ctx.db
+      .query("authSessions")
+      .withIndex("userId", (q) => q.eq("userId", targetUserId))
+      .collect();
+    for (const session of sessions) await ctx.db.delete(session._id);
+
+    // Delete auth accounts for this user
+    const accounts = await ctx.db
+      .query("authAccounts")
+      .withIndex("userIdAndProvider", (q) => q.eq("userId", targetUserId))
+      .collect();
+    for (const account of accounts) await ctx.db.delete(account._id);
+
+    // Delete the user record itself so they no longer appear in user lists
+    await ctx.db.delete(targetUserId);
+
     return null;
   },
 });

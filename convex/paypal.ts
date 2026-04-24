@@ -1,22 +1,17 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 declare const process: { env: Record<string, string | undefined> };
 
-// ========== PayPal Configuration ==========
-// Live credentials — server-side only, never exposed to the client.
-// Once Convex production env vars are confirmed working, move these there.
-const PAYPAL_CONFIG = {
-  clientId: process.env.PAYPAL_CLIENT_ID || "YOUR_PAYPAL_CLIENT_ID",
-  clientSecret: process.env.PAYPAL_CLIENT_SECRET || "YOUR_PAYPAL_CLIENT_SECRET",
-  monthlyPlanId:
-    process.env.PAYPAL_PLAN_MONTHLY || "YOUR_PAYPAL_PLAN_MONTHLY",
-  annualPlanId:
-    process.env.PAYPAL_PLAN_ANNUAL || "YOUR_PAYPAL_PLAN_ANNUAL",
-  mode: "live" as const,
-};
+const PAYPAL_SETTING_KEYS = {
+  clientId: "PAYPAL_CLIENT_ID",
+  clientSecret: "PAYPAL_CLIENT_SECRET",
+  monthlyPlanId: "PAYPAL_PLAN_MONTHLY",
+  annualPlanId: "PAYPAL_PLAN_ANNUAL",
+  mode: "PAYPAL_MODE",
+} as const;
 
 // ========== Internal helpers to read config from DB ==========
 
@@ -69,24 +64,50 @@ function toBase64(str: string): string {
   return result;
 }
 
-/**
- * Get PayPal credentials — uses hardcoded config directly.
- * DB and env var lookups bypassed due to deployment sync issues.
- */
 async function getPayPalCredentials(_ctx: any): Promise<{
   clientId: string;
   clientSecret: string;
   monthlyPlanId: string;
   annualPlanId: string;
-  mode: string;
+  mode: "sandbox" | "live";
 }> {
-  return {
-    clientId: PAYPAL_CONFIG.clientId,
-    clientSecret: PAYPAL_CONFIG.clientSecret,
-    monthlyPlanId: PAYPAL_CONFIG.monthlyPlanId,
-    annualPlanId: PAYPAL_CONFIG.annualPlanId,
-    mode: PAYPAL_CONFIG.mode,
+  const getSetting = async (key: string) => {
+    const value = await _ctx.runQuery(internal.paypal._getSettingByKey, { key });
+    return value?.trim() || null;
   };
+
+  const clientId =
+    (await getSetting(PAYPAL_SETTING_KEYS.clientId)) ??
+    process.env.PAYPAL_CLIENT_ID?.trim() ??
+    "";
+  const clientSecret =
+    (await getSetting(PAYPAL_SETTING_KEYS.clientSecret)) ??
+    process.env.PAYPAL_CLIENT_SECRET?.trim() ??
+    "";
+  const monthlyPlanId =
+    (await getSetting(PAYPAL_SETTING_KEYS.monthlyPlanId)) ??
+    process.env.PAYPAL_PLAN_MONTHLY?.trim() ??
+    "";
+  const annualPlanId =
+    (await getSetting(PAYPAL_SETTING_KEYS.annualPlanId)) ??
+    process.env.PAYPAL_PLAN_ANNUAL?.trim() ??
+    "";
+  const modeValue =
+    (await getSetting(PAYPAL_SETTING_KEYS.mode)) ??
+    process.env.PAYPAL_MODE?.trim() ??
+    "live";
+
+  return {
+    clientId,
+    clientSecret,
+    monthlyPlanId,
+    annualPlanId,
+    mode: modeValue === "sandbox" ? "sandbox" : "live",
+  };
+}
+
+function hasConfiguredValue(value: string | null | undefined) {
+  return !!value && !value.startsWith("YOUR_PAYPAL_");
 }
 
 /**
@@ -94,7 +115,19 @@ async function getPayPalCredentials(_ctx: any): Promise<{
  * Uses both Authorization header AND body params for maximum compatibility
  */
 async function getPayPalAccessToken(ctx: any): Promise<{ accessToken: string; mode: string }> {
-  const { clientId, clientSecret, mode } = await getPayPalCredentials(ctx);
+  const { clientId, clientSecret, monthlyPlanId, annualPlanId, mode } =
+    await getPayPalCredentials(ctx);
+
+  if (
+    !hasConfiguredValue(clientId) ||
+    !hasConfiguredValue(clientSecret) ||
+    !hasConfiguredValue(monthlyPlanId) ||
+    !hasConfiguredValue(annualPlanId)
+  ) {
+    throw new Error(
+      "PayPal is not configured. Add the client ID, client secret, monthly plan ID, and annual plan ID in Admin > Subscribers.",
+    );
+  }
 
   const baseUrl = mode === "live"
     ? "https://api-m.paypal.com"
@@ -156,9 +189,8 @@ function getPeriodEndFromBillingCycle(
   return now + days * 24 * 60 * 60 * 1000;
 }
 
-function mapBillingCycleToPlan(billingCycle: "monthly" | "annual") {
-  // Keep existing schema-compatible plan values.
-  return billingCycle === "annual" ? "pro" : "starter";
+function mapBillingCycleToPlan(): "starter" | "pro" | "enterprise" {
+  return "starter";
 }
 
 /**
@@ -185,11 +217,11 @@ export const createSubscription = action({
       const baseUrl = getBaseUrl(mode);
       const planId = billingCycle === "annual" ? annualPlanId : monthlyPlanId;
 
-      if (!planId || planId.startsWith("YOUR_PAYPAL_PLAN_")) {
+      if (!hasConfiguredValue(planId)) {
         return {
           subscriptionId: null,
           error:
-            "PayPal plan IDs are not configured. Set PAYPAL_PLAN_MONTHLY and PAYPAL_PLAN_ANNUAL.",
+            "PayPal plan IDs are not configured. Add the monthly and annual plan IDs in Admin > Subscribers.",
         };
       }
 
@@ -303,7 +335,7 @@ export const confirmSubscription = action({
         Number.isFinite(nextBillingTime) && nextBillingTime
           ? nextBillingTime
           : getPeriodEndFromBillingCycle(billingCycle, now);
-      const plan = mapBillingCycleToPlan(billingCycle);
+      const plan = mapBillingCycleToPlan();
 
       await ctx.runMutation(internal.subscriptions.upsertFromStripe, {
         userId,
@@ -312,6 +344,8 @@ export const confirmSubscription = action({
           `paypal_customer_${userId}`,
         stripeSubscriptionId: `paypal_sub_${subscriptionData.id}`,
         stripePriceId: `paypal_${billingCycle}`,
+        billingProvider: "paypal",
+        billingCycle,
         plan,
         status: "active",
         currentPeriodStart: now,
@@ -389,6 +423,12 @@ export const _getLatestSubscriptionByUser = internalQuery({
       stripeCustomerId: v.string(),
       stripeSubscriptionId: v.string(),
       stripePriceId: v.string(),
+      billingProvider: v.optional(
+        v.union(v.literal("stripe"), v.literal("paypal"), v.literal("admin")),
+      ),
+      billingCycle: v.optional(
+        v.union(v.literal("monthly"), v.literal("annual")),
+      ),
       plan: v.union(
         v.literal("starter"),
         v.literal("pro"),
@@ -433,11 +473,59 @@ export const isConfigured = action({
   }),
   handler: async (ctx) => {
     try {
-      const { clientId } = await getPayPalCredentials(ctx);
-      return { configured: true, clientId };
+      const { clientId, clientSecret, monthlyPlanId, annualPlanId } =
+        await getPayPalCredentials(ctx);
+      const configured =
+        hasConfiguredValue(clientId) &&
+        hasConfiguredValue(clientSecret) &&
+        hasConfiguredValue(monthlyPlanId) &&
+        hasConfiguredValue(annualPlanId);
+      return {
+        configured,
+        clientId: configured ? clientId : null,
+      };
     } catch {
       return { configured: false, clientId: null };
     }
+  },
+});
+
+export const getAdminConfig = query({
+  args: {},
+  returns: v.object({
+    configured: v.boolean(),
+    clientId: v.string(),
+    hasClientSecret: v.boolean(),
+    monthlyPlanId: v.string(),
+    annualPlanId: v.string(),
+    mode: v.union(v.literal("sandbox"), v.literal("live")),
+  }),
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const profile = await ctx.runQuery(internal.admin.getProfileInternal, {
+      userId,
+    });
+    if (!profile || profile.role !== "admin") {
+      throw new Error("Admin access required");
+    }
+
+    const { clientId, clientSecret, monthlyPlanId, annualPlanId, mode } =
+      await getPayPalCredentials(ctx);
+
+    return {
+      configured:
+        hasConfiguredValue(clientId) &&
+        hasConfiguredValue(clientSecret) &&
+        hasConfiguredValue(monthlyPlanId) &&
+        hasConfiguredValue(annualPlanId),
+      clientId: hasConfiguredValue(clientId) ? clientId : "",
+      hasClientSecret: hasConfiguredValue(clientSecret),
+      monthlyPlanId: hasConfiguredValue(monthlyPlanId) ? monthlyPlanId : "",
+      annualPlanId: hasConfiguredValue(annualPlanId) ? annualPlanId : "",
+      mode,
+    };
   },
 });
 
@@ -448,11 +536,13 @@ export const isConfigured = action({
 export const setCredentials = action({
   args: {
     clientId: v.string(),
-    clientSecret: v.string(),
+    clientSecret: v.optional(v.string()),
+    monthlyPlanId: v.string(),
+    annualPlanId: v.string(),
     mode: v.union(v.literal("sandbox"), v.literal("live")),
   },
   returns: v.object({ success: v.boolean(), error: v.optional(v.string()) }),
-  handler: async (ctx, { clientId, clientSecret, mode }) => {
+  handler: async (ctx, { clientId, clientSecret, monthlyPlanId, annualPlanId, mode }) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return { success: false, error: "Not authenticated" };
 
@@ -461,9 +551,46 @@ export const setCredentials = action({
       return { success: false, error: "Admin access required" };
     }
 
-    await ctx.runMutation(internal.paypal._upsertSetting, { key: "PAYPAL_CLIENT_ID", value: clientId });
-    await ctx.runMutation(internal.paypal._upsertSetting, { key: "PAYPAL_CLIENT_SECRET", value: clientSecret });
-    await ctx.runMutation(internal.paypal._upsertSetting, { key: "PAYPAL_MODE", value: mode });
+    const existingSecret = await ctx.runQuery(internal.paypal._getSettingByKey, {
+      key: PAYPAL_SETTING_KEYS.clientSecret,
+    });
+
+    if (!clientId.trim() || !monthlyPlanId.trim() || !annualPlanId.trim()) {
+      return {
+        success: false,
+        error: "Client ID, monthly plan ID, and annual plan ID are required.",
+      };
+    }
+
+    if (!clientSecret?.trim() && !hasConfiguredValue(existingSecret)) {
+      return {
+        success: false,
+        error: "Client secret is required the first time you configure PayPal.",
+      };
+    }
+
+    await ctx.runMutation(internal.paypal._upsertSetting, {
+      key: PAYPAL_SETTING_KEYS.clientId,
+      value: clientId.trim(),
+    });
+    if (clientSecret?.trim()) {
+      await ctx.runMutation(internal.paypal._upsertSetting, {
+        key: PAYPAL_SETTING_KEYS.clientSecret,
+        value: clientSecret.trim(),
+      });
+    }
+    await ctx.runMutation(internal.paypal._upsertSetting, {
+      key: PAYPAL_SETTING_KEYS.monthlyPlanId,
+      value: monthlyPlanId.trim(),
+    });
+    await ctx.runMutation(internal.paypal._upsertSetting, {
+      key: PAYPAL_SETTING_KEYS.annualPlanId,
+      value: annualPlanId.trim(),
+    });
+    await ctx.runMutation(internal.paypal._upsertSetting, {
+      key: PAYPAL_SETTING_KEYS.mode,
+      value: mode,
+    });
 
     return { success: true };
   },

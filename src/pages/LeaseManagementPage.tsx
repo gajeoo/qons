@@ -1,0 +1,270 @@
+import { useMutation, useQuery } from "convex/react";
+import { Download, FileText, Plus } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+
+const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+function toCsvRow(values: Array<string | number>) {
+  return values.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(",");
+}
+
+function exportCsv(fileName: string, headers: string[], rows: Array<Array<string | number>>) {
+  const csv = [toCsvRow(headers), ...rows.map(toCsvRow)].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportPdf(title: string, headers: string[], rows: Array<Array<string | number>>) {
+  const htmlRows = rows
+    .map((row) => `<tr>${row.map((cell) => `<td style="border:1px solid #ddd;padding:6px;">${String(cell ?? "")}</td>`).join("")}</tr>`)
+    .join("");
+  const html = `
+    <html><head><title>${title}</title></head><body>
+    <h2>${title}</h2>
+    <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:12px;">
+      <thead><tr>${headers.map((h) => `<th style="border:1px solid #ddd;padding:6px;text-align:left;">${h}</th>`).join("")}</tr></thead>
+      <tbody>${htmlRows}</tbody>
+    </table>
+    </body></html>
+  `;
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) return;
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+}
+
+export function LeaseManagementPage() {
+  const leases = useQuery(api.operations.listLeaseAgreements) || [];
+  const residents = useQuery(api.residents.list, { propertyId: undefined }) || [];
+  const properties = useQuery(api.properties.list) || [];
+  const createLease = useMutation(api.operations.createLeaseAgreement);
+  const updateStatus = useMutation(api.operations.updateLeaseStatus);
+  const renewals = useQuery(api.operations.listLeaseRenewals) || [];
+  const requestRenewal = useMutation(api.operations.requestLeaseRenewal);
+  const updateRenewalStatus = useMutation(api.operations.updateLeaseRenewalStatus);
+  const generateUploadUrl = useMutation(api.operations.generateLeaseDocumentUploadUrl);
+  const addLeaseDocument = useMutation(api.operations.addLeaseDocument);
+  const [selectedLeaseId, setSelectedLeaseId] = useState<Id<"leaseAgreements"> | null>(null);
+  const documents = useQuery(
+    api.operations.listLeaseDocuments,
+    selectedLeaseId ? { leaseId: selectedLeaseId } : "skip",
+  ) || [];
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    residentId: "",
+    propertyId: "",
+    unit: "",
+    startDate: new Date().toISOString().slice(0, 10),
+    endDate: new Date(Date.now() + 31536000000).toISOString().slice(0, 10),
+    rent: "",
+    deposit: "",
+    esignProvider: "internal" as "docusign" | "hellosign" | "internal" | "none",
+    externalDocumentId: "",
+  });
+
+  const create = async () => {
+    const rentCents = Math.round(Number(form.rent || "0") * 100);
+    if (!rentCents) {
+      toast.error("Rent amount is required");
+      return;
+    }
+
+    await createLease({
+      residentId: form.residentId ? (form.residentId as Id<"residents">) : undefined,
+      propertyId: form.propertyId ? (form.propertyId as Id<"properties">) : undefined,
+      unit: form.unit.trim() || undefined,
+      startDate: form.startDate,
+      endDate: form.endDate,
+      rentCents,
+      depositCents: form.deposit ? Math.round(Number(form.deposit) * 100) : undefined,
+      esignProvider: form.esignProvider,
+      externalDocumentId: form.externalDocumentId.trim() || undefined,
+    });
+
+    toast.success("Lease agreement created");
+    setOpen(false);
+    setForm({ ...form, rent: "", deposit: "", unit: "", externalDocumentId: "" });
+  };
+
+  const exportRows = leases.map((lease) => [
+    lease.residentName || "",
+    lease.propertyName || "",
+    lease.unit || "",
+    lease.status,
+    lease.startDate,
+    lease.endDate,
+    (lease.rentCents / 100).toFixed(2),
+    lease.esignProvider,
+  ]);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Lease Management & eSignatures</h1>
+          <p className="text-sm text-muted-foreground">Manage lease lifecycle and track eSignature providers.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => exportCsv("leases.csv", ["Resident", "Property", "Unit", "Status", "Start", "End", "Rent", "eSign Provider"], exportRows)}>
+            <Download className="size-4" /> CSV
+          </Button>
+          <Button variant="outline" onClick={() => exportPdf("Lease Agreements", ["Resident", "Property", "Unit", "Status", "Start", "End", "Rent", "eSign Provider"], exportRows)}>
+            <FileText className="size-4" /> PDF
+          </Button>
+          <Button onClick={() => setOpen(true)} className="bg-teal text-white hover:bg-teal/90"><Plus className="size-4" /> New Lease</Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader><CardTitle>Leases</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {leases.length === 0 ? <p className="text-sm text-muted-foreground">No leases yet.</p> : null}
+          {leases.map((lease) => (
+            <div key={lease._id} className="rounded-md border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium">{lease.residentName || "Unassigned resident"} • {money.format(lease.rentCents / 100)} / month</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{lease.status}</p>
+              </div>
+              <p className="text-xs text-muted-foreground">{lease.startDate} → {lease.endDate} • {lease.esignProvider}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => updateStatus({ leaseId: lease._id, status: "sent" }).then(() => toast.success("Marked sent"))}>Sent</Button>
+                <Button size="sm" variant="outline" onClick={() => updateStatus({ leaseId: lease._id, status: "signed" }).then(() => toast.success("Marked signed"))}>Signed</Button>
+                <Button size="sm" variant="outline" onClick={() => updateStatus({ leaseId: lease._id, status: "active" }).then(() => toast.success("Marked active"))}>Active</Button>
+                <Button size="sm" variant="outline" onClick={() => requestRenewal({ leaseId: lease._id, proposedEndDate: new Date(new Date(lease.endDate).getTime() + 31536000000).toISOString().slice(0, 10), proposedRentCents: lease.rentCents }).then(() => toast.success("Renewal sent"))}>Send Renewal</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    const input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = ".pdf,.doc,.docx";
+                    input.onchange = async () => {
+                      const file = input.files?.[0];
+                      if (!file) return;
+                      const uploadUrl = await generateUploadUrl({});
+                      const res = await fetch(uploadUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": file.type || "application/octet-stream" },
+                        body: file,
+                      });
+                      const body = await res.json();
+                      await addLeaseDocument({
+                        leaseId: lease._id,
+                        fileName: file.name,
+                        storageId: body.storageId,
+                      });
+                      setSelectedLeaseId(lease._id);
+                      toast.success("Lease document uploaded");
+                    };
+                    input.click();
+                  }}
+                >
+                  Upload Document
+                </Button>
+              </div>
+              {selectedLeaseId === lease._id && documents.length > 0 ? (
+                <div className="mt-3 space-y-1">
+                  {documents.map((doc) => (
+                    <a key={doc._id} href={doc.fileUrl || "#"} target="_blank" rel="noreferrer" className="block text-xs text-blue-600 underline">
+                      {doc.fileName}
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Renewal Workflow</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {renewals.length === 0 ? <p className="text-sm text-muted-foreground">No lease renewals yet.</p> : null}
+          {renewals.map((renewal) => (
+            <div key={renewal._id} className="rounded-md border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium">{renewal.currentEndDate} → {renewal.proposedEndDate}</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{renewal.status}</p>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => updateRenewalStatus({ renewalId: renewal._id, status: "approved" }).then(() => toast.success("Renewal approved"))}>Approve</Button>
+                <Button size="sm" variant="outline" onClick={() => updateRenewalStatus({ renewalId: renewal._id, status: "declined" }).then(() => toast.success("Renewal declined"))}>Decline</Button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Create Lease</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <Label>Resident</Label>
+                <Select value={form.residentId || "__none__"} onValueChange={(value) => setForm({ ...form, residentId: value === "__none__" ? "" : value })}>
+                  <SelectTrigger><SelectValue placeholder="No resident" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No resident</SelectItem>
+                    {residents.map((resident) => <SelectItem key={resident._id} value={resident._id}>{resident.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Property</Label>
+                <Select value={form.propertyId || "__none__"} onValueChange={(value) => setForm({ ...form, propertyId: value === "__none__" ? "" : value })}>
+                  <SelectTrigger><SelectValue placeholder="No property" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">No property</SelectItem>
+                    {properties.map((property) => <SelectItem key={property._id} value={property._id}>{property.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><Label>Unit</Label><Input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} /></div>
+              <div>
+                <Label>eSign Provider</Label>
+                <Select value={form.esignProvider} onValueChange={(value: "docusign" | "hellosign" | "internal" | "none") => setForm({ ...form, esignProvider: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="internal">Internal</SelectItem>
+                    <SelectItem value="docusign">DocuSign</SelectItem>
+                    <SelectItem value="hellosign">HelloSign</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><Label>Start Date</Label><Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} /></div>
+              <div><Label>End Date</Label><Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} /></div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><Label>Monthly Rent ($)</Label><Input type="number" value={form.rent} onChange={(e) => setForm({ ...form, rent: e.target.value })} /></div>
+              <div><Label>Deposit ($)</Label><Input type="number" value={form.deposit} onChange={(e) => setForm({ ...form, deposit: e.target.value })} /></div>
+            </div>
+            <div><Label>External Document ID</Label><Input value={form.externalDocumentId} onChange={(e) => setForm({ ...form, externalDocumentId: e.target.value })} /></div>
+            <Button onClick={create} className="w-full bg-teal text-white hover:bg-teal/90">Create Lease</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

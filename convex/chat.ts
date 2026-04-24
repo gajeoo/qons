@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
 // ============================================================
 // VISITOR-FACING (Chat Widget)
@@ -14,9 +15,11 @@ export const getOrCreateConversation = mutation({
     visitorId: v.string(),
     visitorName: v.optional(v.string()),
     visitorEmail: v.optional(v.string()),
+    source: v.optional(v.union(v.literal("widget"), v.literal("dashboard"))),
+    metadata: v.optional(v.string()),
   },
   returns: v.id("chatConversations"),
-  handler: async (ctx, { visitorId, visitorName, visitorEmail }) => {
+  handler: async (ctx, { visitorId, visitorName, visitorEmail, source, metadata }) => {
     // Check for existing active conversation
     const existing = await ctx.db
       .query("chatConversations")
@@ -43,7 +46,8 @@ export const getOrCreateConversation = mutation({
       status: "active",
       lastMessageAt: Date.now(),
       unreadByAdmin: 0,
-      source: "widget",
+      source: source ?? "widget",
+      metadata,
     });
 
     // Add welcome message
@@ -51,7 +55,9 @@ export const getOrCreateConversation = mutation({
       conversationId,
       role: "ai",
       content:
-        "Hi there! 👋 Welcome to QuonsApp. I'm your AI assistant. I can help you learn about our premium real estate management platform, pricing, features, or anything else. How can I help you today?",
+        source === "dashboard"
+          ? "Hi! I'm your QuonsApp assistant. I can help you plan work, answer product questions, suggest automations, and guide scheduling, HOA, staffing, or operational next steps. What do you want to work on?"
+          : "Hi there! 👋 Welcome to QuonsApp. I'm your AI assistant. I can help you learn about our premium real estate management platform, pricing, features, or anything else. How can I help you today?",
     });
 
     return conversationId;
@@ -72,6 +78,7 @@ export const sendVisitorMessage = mutation({
   handler: async (ctx, { conversationId, content, visitorName, visitorEmail }) => {
     const conversation = await ctx.db.get(conversationId);
     if (!conversation) throw new Error("Conversation not found");
+    const authUserId = await getAuthUserId(ctx);
 
     // Update visitor info if provided
     const patch: Record<string, any> = {
@@ -90,8 +97,14 @@ export const sendVisitorMessage = mutation({
       senderName: visitorName || conversation.visitorName,
     });
 
+    const taskCreationResult = await tryCreateTaskFromAssistantMessage(ctx, {
+      authUserId,
+      conversation,
+      content,
+    });
+
     // Generate AI response inline (keyword-based for speed)
-    const aiResponse = generateAiResponse(content);
+    const aiResponse = taskCreationResult ?? generateAiResponse(content);
     await ctx.db.insert("chatMessages", {
       conversationId,
       role: "ai",
@@ -103,6 +116,102 @@ export const sendVisitorMessage = mutation({
     return null;
   },
 });
+
+async function tryCreateTaskFromAssistantMessage(
+  ctx: any,
+  {
+    authUserId,
+    conversation,
+    content,
+  }: {
+    authUserId: Id<"users"> | null;
+    conversation: { source: "widget" | "dashboard" };
+    content: string;
+  },
+): Promise<string | null> {
+  if (!authUserId || conversation.source !== "dashboard") {
+    return null;
+  }
+
+  const trimmed = content.trim();
+  const firstLine = trimmed.split(/\r?\n/, 1)[0] ?? "";
+  const createTaskMatch = firstLine.match(/^create\s+task\s*[:-]?\s*(.*)$/i)
+    ?? firstLine.match(/^(?:please\s+)?(?:create|add)\s+(?:a\s+)?task(?:\s+(?:to|for))?\s*[:-]?\s*(.*)$/i);
+
+  if (!createTaskMatch) {
+    return null;
+  }
+
+  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const title = (createTaskMatch[1] ?? "").trim();
+  if (!title) {
+    return "To create a task, start your message with **Create task** and the task title. Example: `Create task: Follow up on overdue HOA dues`. You can optionally add lines like `Priority: high`, `Due: 2026-04-25`, `Category: hoa`, or `Property: Sunset Towers`.";
+  }
+
+  let description: string | undefined;
+  let dueDate: string | undefined;
+  let priority: "low" | "medium" | "high" | "urgent" = "medium";
+  let category: "maintenance" | "inspection" | "cleaning" | "administrative" | "hoa" | "other" | undefined;
+  let propertyId: Id<"properties"> | undefined;
+
+  for (const line of lines.slice(1)) {
+    const separatorIndex = line.indexOf(":");
+    if (separatorIndex === -1) {
+      description = description ? `${description}\n${line}` : line;
+      continue;
+    }
+
+    const key = line.slice(0, separatorIndex).trim().toLowerCase();
+    const value = line.slice(separatorIndex + 1).trim();
+    if (!value) continue;
+
+    if (key === "priority" && ["low", "medium", "high", "urgent"].includes(value.toLowerCase())) {
+      priority = value.toLowerCase() as typeof priority;
+      continue;
+    }
+
+    if (key === "due") {
+      dueDate = value;
+      continue;
+    }
+
+    if (key === "category" && ["maintenance", "inspection", "cleaning", "administrative", "hoa", "other"].includes(value.toLowerCase())) {
+      category = value.toLowerCase() as NonNullable<typeof category>;
+      continue;
+    }
+
+    if (key === "property") {
+      const properties = await ctx.db
+        .query("properties")
+        .withIndex("by_userId", (q: any) => q.eq("userId", authUserId))
+        .collect();
+      const property = properties.find((item: any) => item.name.toLowerCase() === value.toLowerCase());
+      propertyId = property?._id;
+      continue;
+    }
+
+    if (key === "description") {
+      description = description ? `${description}\n${value}` : value;
+      continue;
+    }
+
+    description = description ? `${description}\n${line}` : line;
+  }
+
+  const taskId = await ctx.db.insert("tasks", {
+    userId: authUserId,
+    title,
+    description,
+    dueDate,
+    priority,
+    propertyId,
+    category,
+    status: "todo",
+  });
+
+  const propertyLabel = propertyId ? " linked to the requested property" : "";
+  return `Done. I created the task **${title}** with ${priority} priority${propertyLabel}. Task ID: ${taskId}. You can see it in the Tasks page now.`;
+}
 
 /**
  * Get messages for a conversation (visitor side)
@@ -176,7 +285,15 @@ export const listConversations = query({
           .first();
 
         return {
-          ...conv,
+          _id: conv._id,
+          _creationTime: conv._creationTime,
+          visitorId: conv.visitorId,
+          visitorName: conv.visitorName,
+          visitorEmail: conv.visitorEmail,
+          status: conv.status,
+          lastMessageAt: conv.lastMessageAt,
+          unreadByAdmin: conv.unreadByAdmin,
+          source: conv.source,
           lastMessage: lastMsg?.content?.slice(0, 100),
         };
       }),
@@ -335,6 +452,10 @@ export const getStats = query({
 
 function generateAiResponse(userMessage: string): string {
   const msg = userMessage.toLowerCase();
+
+  if (msg.includes("create task") || msg.includes("add task") || msg.includes("new task")) {
+    return "I can create a real task for you from chat. Use this format:\n\n**Create task:** Follow up on overdue HOA dues\nPriority: high\nDue: 2026-04-25\nCategory: hoa\nProperty: Sunset Towers\nDescription: Call residents with balances over 30 days and prepare notices.\n\nOnly the first line is required; the other fields are optional.";
+  }
 
   if (msg.includes("pric") || msg.includes("cost") || msg.includes("how much") || msg.includes("subscription")) {
     return "QuonsApp is **$49.99/month** with a **14-day free trial** — no credit card required!\n\nYour subscription includes:\n• Unlimited properties & portfolio management\n• AI-powered scheduling & shift management\n• HOA management (violations, dues, board votes)\n• Staff & resident management\n• Interactive property maps\n• Time tracking & payroll exports\n• Executive analytics dashboard\n• Team collaboration & task delegation\n• Amenity booking system\n\nStart your free trial today — [Sign up here](/signup)!";

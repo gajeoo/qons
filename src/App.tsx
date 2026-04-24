@@ -9,6 +9,7 @@ import { Toaster } from "./components/ui/sonner";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import {
   AboutPage,
+  AccountingPage,
   AccountPausedPage,
   AdminChatPage,
   AdminDashboardPage,
@@ -17,6 +18,7 @@ import {
   AdminUsersPage,
   AmenitiesPage,
   AnalyticsPage,
+  AutomationsPage,
   BlogPage,
   CheckoutSuccessPage,
   ContactPage,
@@ -24,6 +26,7 @@ import {
   FeaturesPage,
   HoaPage,
   LandingPage,
+  LeaseManagementPage,
   LoginPage,
   OnboardingPage,
   PayrollPage,
@@ -31,13 +34,18 @@ import {
   PricingPage,
   PropertiesPage,
   ResidentsPage,
+  RentCollectionPage,
   SchedulePage,
   SettingsPage,
   SignupPage,
   StaffPage,
+  TenantScreeningPage,
+  TenantPortalPage,
+  TenantPortalResidentPage,
   TasksPage,
   TeamPage,
   TimeTrackingPage,
+  IntegrationsPage,
 } from "./pages";
 
 function App() {
@@ -86,6 +94,14 @@ function App() {
               <Route path="/map" element={<MapPage />} />
               <Route path="/time-tracking" element={<TimeTrackingPage />} />
               <Route path="/tasks" element={<TasksPage />} />
+              <Route path="/automations" element={<AutomationsPage />} />
+              <Route path="/accounting" element={<AccountingPage />} />
+              <Route path="/rent-collection" element={<RentCollectionPage />} />
+              <Route path="/tenant-screening" element={<TenantScreeningPage />} />
+              <Route path="/tenant-portal" element={<TenantPortalPage />} />
+              <Route path="/portal" element={<TenantPortalResidentPage />} />
+              <Route path="/leases" element={<LeaseManagementPage />} />
+              <Route path="/integrations" element={<IntegrationsPage />} />
               <Route path="/payroll" element={<PayrollPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/amenities" element={<AmenitiesPage />} />
