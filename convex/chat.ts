@@ -135,8 +135,8 @@ async function tryCreateTaskFromAssistantMessage(
 
   const trimmed = content.trim();
   const firstLine = trimmed.split(/\r?\n/, 1)[0] ?? "";
-  const createTaskMatch = firstLine.match(/^create\s+task\s*[:\-]?\s*(.*)$/i)
-    ?? firstLine.match(/^(?:please\s+)?(?:create|add)\s+(?:a\s+)?task(?:\s+(?:to|for))?\s*[:\-]?\s*(.*)$/i);
+  const createTaskMatch = firstLine.match(/^create\s+task\s*[:-]?\s*(.*)$/i)
+    ?? firstLine.match(/^(?:please\s+)?(?:create|add)\s+(?:a\s+)?task(?:\s+(?:to|for))?\s*[:-]?\s*(.*)$/i);
 
   if (!createTaskMatch) {
     return null;

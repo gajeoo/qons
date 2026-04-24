@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -329,7 +330,7 @@ function HoaPageInner() {
                   {v.fineAmount != null && <p className="text-sm font-medium text-red-600">Fine: ${v.fineAmount}</p>}
                   {v.attachmentUrls && v.attachmentUrls.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {v.attachmentUrls.map((url, index) => (
+                      {v.attachmentUrls.map((url: string, index: number) => (
                         <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="text-xs text-teal underline">Attachment {index + 1}</a>
                       ))}
                     </div>
@@ -366,7 +367,7 @@ function HoaPageInner() {
                   <div className="mt-3 rounded-lg border bg-muted/30 p-3">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Notice History</p>
                     <div className="space-y-2">
-                      {v.noticeHistory.slice().reverse().map((notice, index) => (
+                      {v.noticeHistory.slice().reverse().map((notice: any, index: number) => (
                         <div key={`${notice.sentAt}-${index}`} className="rounded-md bg-background p-2 text-xs">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium">{notice.template.replace(/_/g, " ")}</span>
@@ -469,7 +470,7 @@ function HoaPageInner() {
                           <span className="text-muted-foreground">{count} votes ({pct}%)</span>
                         </div>
                         <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-teal rounded-full" style={{ width: `${pct}%` }} />
+                          <Progress value={pct} className="h-full [&>*]:bg-teal" />
                         </div>
                       </div>
                     );
@@ -523,7 +524,7 @@ function HoaPageInner() {
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Agenda</p>
                     <div className="flex flex-wrap gap-2">
-                      {meeting.agenda.map((item) => (
+                      {meeting.agenda.map((item: string) => (
                         <Badge key={item} variant="outline">{item}</Badge>
                       ))}
                     </div>
@@ -589,7 +590,7 @@ function HoaPageInner() {
                     {r.reviewNotes && <p className="text-sm text-blue-600">Review: {r.reviewNotes}</p>}
                     {r.attachmentUrls && r.attachmentUrls.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {r.attachmentUrls.map((url, index) => (
+                        {r.attachmentUrls.map((url: string, index: number) => (
                           <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="text-xs text-teal underline">Attachment {index + 1}</a>
                         ))}
                       </div>
@@ -686,7 +687,7 @@ function HoaPageInner() {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-                      <div className="bg-blue-600 h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+                      <Progress value={Math.min(pct, 100)} className="h-full [&>*]:bg-blue-600" />
                     </div>
                     <span className="text-sm font-medium whitespace-nowrap">{pct}% — ${(fund.currentAmount / 100).toLocaleString()} / ${(fund.targetAmount / 100).toLocaleString()}</span>
                   </div>
@@ -930,14 +931,20 @@ function HoaPageInner() {
           <DialogHeader><DialogTitle>Create Reserve Fund</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Property *</Label>
-              <Select onValueChange={(v) => (document.getElementById("rf-prop") as any).__val = v}>
+              <Select onValueChange={(v) => {
+                const el = document.getElementById("rf-prop") as any;
+                if (el) el.__val = v;
+              }}>
                 <SelectTrigger id="rf-prop"><SelectValue placeholder="Select property" /></SelectTrigger>
                 <SelectContent>{properties.map((p) => <SelectItem key={p._id} value={p._id}>{p.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div><Label>Fund Name *</Label><Input id="rf-name" placeholder="e.g. Roof Replacement 2027" /></div>
             <div><Label>Category</Label>
-              <Select defaultValue="general" onValueChange={(v) => (document.getElementById("rf-cat") as any).__val = v}>
+              <Select defaultValue="general" onValueChange={(v) => {
+                const el = document.getElementById("rf-cat") as any;
+                if (el) el.__val = v;
+              }}>
                 <SelectTrigger id="rf-cat"><SelectValue /></SelectTrigger>
                 <SelectContent>{["roof","elevator","hvac","parking","landscaping","pool","general","emergency","other"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>

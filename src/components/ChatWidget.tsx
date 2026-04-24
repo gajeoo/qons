@@ -150,8 +150,10 @@ export function ChatWidget({
         </div>
         {layout === "floating" && (
           <button
+            type="button"
             onClick={() => setIsOpen(false)}
             className="size-8 rounded-full hover:bg-white/20 flex items-center justify-center transition-colors"
+            title="Close chat"
           >
             <X className="size-4" />
           </button>
@@ -197,9 +199,9 @@ export function ChatWidget({
           <div className="flex justify-start">
             <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
               <div className="flex gap-1">
-                <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "0ms" }} />
-                <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "150ms" }} />
-                <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "300ms" }} />
+                <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
+                <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
+                <div className="size-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
               </div>
             </div>
           </div>

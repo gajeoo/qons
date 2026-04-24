@@ -396,7 +396,7 @@ export function LandingPage() {
               <div key={t.name} className="rounded-2xl border bg-white dark:bg-slate-900 p-6">
                 <div className="flex gap-1 mb-4">
                   {[1, 2, 3, 4, 5].map((s) => (
-                    <svg key={s} className="size-4 text-amber-400 fill-amber-400" viewBox="0 0 20 20">
+                    <svg key={s} className="size-4 text-amber-400 fill-amber-400" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
                       <path d="M10 1l2.39 6.37H19l-5.3 4.26 1.86 6.37L10 13.83 4.44 18l1.86-6.37L1 7.37h6.61z" />
                     </svg>
                   ))}

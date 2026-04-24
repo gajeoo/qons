@@ -225,7 +225,7 @@ async function verifyStripeSignature(
 
     // Check timestamp is within tolerance (5 min)
     const now = Math.floor(Date.now() / 1000);
-    if (Math.abs(now - Number.parseInt(timestamp)) > 300) return false;
+    if (Math.abs(now - Number.parseInt(timestamp, 10)) > 300) return false;
 
     // Compute expected signature
     const signedPayload = `${timestamp}.${payload}`;

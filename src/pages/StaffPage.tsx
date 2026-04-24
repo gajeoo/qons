@@ -81,7 +81,7 @@ function StaffPageInner() {
         role: form.role, hourlyRate: parseFloat(form.hourlyRate) || 0,
         certifications: form.certifications ? form.certifications.split(",").map((c) => c.trim()).filter(Boolean) : undefined,
         skills: form.skills ? form.skills.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
-        maxHoursPerWeek: parseInt(form.maxHoursPerWeek) || 40,
+        maxHoursPerWeek: parseInt(form.maxHoursPerWeek, 10) || 40,
         hireDate: form.hireDate || undefined, notes: form.notes || undefined,
       };
       if (editingId) {

@@ -44,7 +44,7 @@ export const list = query({
 
     const { ownerUserId, isWorker, linkedStaffId } = context;
 
-    let entries;
+    let entries: any[] = [];
 
     // Workers can only see their own time entries
     if (isWorker && linkedStaffId) {

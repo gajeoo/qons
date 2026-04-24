@@ -125,13 +125,17 @@ function PayrollPageInner() {
             <Card key={p._id}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 cursor-pointer" onClick={() => setExpandedId(expandedId === p._id ? null : p._id)}>
+                  <button
+                    type="button"
+                    className="flex items-center gap-4 cursor-pointer text-left"
+                    onClick={() => setExpandedId(expandedId === p._id ? null : p._id)}
+                  >
                     <div>
                       <p className="font-semibold">{p.periodStart} → {p.periodEnd}</p>
                       <p className="text-sm text-muted-foreground">{p.staffCount} staff · {p.totalHours}h · {formatLabel[p.format]}</p>
                     </div>
                     <Badge className={statusColor[p.status]}>{p.status}</Badge>
-                  </div>
+                  </button>
                   <div className="flex items-center gap-2">
                     <div className="text-right mr-3">
                       <p className="font-bold text-lg">${(p.totalWithTax ?? p.totalAmount).toLocaleString()}</p>

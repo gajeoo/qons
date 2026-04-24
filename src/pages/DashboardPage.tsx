@@ -11,7 +11,7 @@ import {
   ExternalLink,
   FileSpreadsheet,
   Gavel,
-  Map,
+  Map as MapIcon,
   Settings,
   Sparkles,
   TreePalm,
@@ -248,7 +248,7 @@ export function DashboardPage() {
               { icon: BarChart3, title: "Executive Analytics", desc: "Utilization, cost-per-building, performance", color: "text-indigo-600 bg-indigo-100", href: "/analytics" },
               { icon: TreePalm, title: "Amenity Booking", desc: "Pool, gym, rooftop — resident reservations", color: "text-cyan-600 bg-cyan-100", href: "/amenities" },
               { icon: Gavel, title: "HOA Management", desc: "Violations, dues, voting, ARC requests, messaging", color: "text-orange-600 bg-orange-100", href: "/hoa" },
-              { icon: Map, title: "Portfolio Map", desc: "Interactive map with property locations and amenities", color: "text-emerald-600 bg-emerald-100", href: "/map" },
+              { icon: MapIcon, title: "Portfolio Map", desc: "Interactive map with property locations and amenities", color: "text-emerald-600 bg-emerald-100", href: "/map" },
             ].map((feature) => (
               <Link key={feature.title} to={feature.href} className="group">
                 <Card className="h-full hover:shadow-md transition-all hover:border-teal/30">

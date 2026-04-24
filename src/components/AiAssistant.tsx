@@ -145,6 +145,7 @@ export function AiAssistant() {
               setIsExpanded(false);
             }}
             className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
+            title="Close assistant"
           >
             <X className="size-4" />
           </button>

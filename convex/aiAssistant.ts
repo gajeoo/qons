@@ -134,7 +134,7 @@ export const sendMessage = mutation({
               : "administrative";
 
       // Check for property assignment
-      let propertyId: any = undefined;
+      let propertyId: any;
       for (const p of properties) {
         if (msg.includes(p.name.toLowerCase())) {
           propertyId = p._id;
@@ -143,7 +143,7 @@ export const sendMessage = mutation({
       }
 
       // Check for staff assignment
-      let assignedToStaffId: any = undefined;
+      let assignedToStaffId: any;
       for (const s of staff) {
         if (msg.includes(s.name.toLowerCase())) {
           assignedToStaffId = s._id;

@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react";
-import { Building2, Map } from "lucide-react";
+import { Building2, Map as MapIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { PropertyMap } from "@/components/PropertyMap";
 import { FeatureGate } from "@/components/FeatureGate";
@@ -13,7 +13,7 @@ export function MapPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Map className="size-6 text-teal" /> Portfolio Map
+            <MapIcon className="size-6 text-teal" /> Portfolio Map
           </h1>
           <p className="text-muted-foreground mt-1">
             Interactive view of all your property locations and nearby amenities

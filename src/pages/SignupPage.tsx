@@ -31,7 +31,7 @@ export function SignupPage() {
         })
         .catch(() => {});
     }
-  }, [isAuthenticated, inviteToken, invitation?.isValid]);
+  }, [isAuthenticated, inviteToken, invitation?.isValid, acceptInvitation, navigate]);
 
   const isInvite = !!inviteToken && !!invitation;
   const validInvite = invitation?.isValid;

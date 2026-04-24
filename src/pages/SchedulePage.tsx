@@ -31,7 +31,7 @@ export function SchedulePage() {
   const [aiLoading, setAiLoading] = useState(false);
 
   // Calculate week range
-  const dateObj = new Date(currentDate + "T12:00:00");
+  const dateObj = new Date(`${currentDate}T12:00:00`);
   const dayOfWeek = dateObj.getDay();
   const weekStart = new Date(dateObj);
   weekStart.setDate(dateObj.getDate() - dayOfWeek);
@@ -53,7 +53,7 @@ export function SchedulePage() {
   const [form, setForm] = useState({ propertyId: "", staffId: "", date: currentDate, startTime: "09:00", endTime: "17:00", shiftType: "regular" as const, notes: "" });
 
   const navigate = (dir: number) => {
-    const d = new Date(currentDate + "T12:00:00");
+    const d = new Date(`${currentDate}T12:00:00`);
     d.setDate(d.getDate() + (viewMode === "week" ? dir * 7 : dir));
     setCurrentDate(d.toISOString().split("T")[0]);
   };
@@ -181,7 +181,7 @@ export function SchedulePage() {
           <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date().toISOString().split("T")[0])}>Today</Button>
           <Button variant="outline" size="sm" onClick={() => navigate(1)}><ChevronRight className="size-4" /></Button>
           <span className="font-medium ml-2">
-            {viewMode === "week" ? `${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : new Date(currentDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            {viewMode === "week" ? `${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : new Date(`${currentDate}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
           </span>
         </div>
         <div className="flex gap-1">

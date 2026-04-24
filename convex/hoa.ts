@@ -8,7 +8,7 @@ export const listViolations = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    let violations;
+    let violations: any[] = [];
     if (args.propertyId) {
       violations = await ctx.db.query("hoaViolations")
         .withIndex("by_propertyId", (q) => q.eq("propertyId", args.propertyId!))
@@ -23,7 +23,7 @@ export const listViolations = query({
     return await Promise.all(
       violations.map(async (violation) => {
         const attachmentUrls = await Promise.all(
-          (violation.attachmentStorageIds ?? []).map(async (storageId) => await ctx.storage.getUrl(storageId)),
+          (violation.attachmentStorageIds ?? []).map(async (storageId: any) => await ctx.storage.getUrl(storageId)),
         );
         return {
           ...violation,
@@ -137,7 +137,7 @@ export const listDues = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    let dues;
+    let dues: any[] = [];
     if (args.propertyId) {
       dues = await ctx.db.query("hoaDues")
         .withIndex("by_propertyId", (q) => q.eq("propertyId", args.propertyId!))
@@ -320,7 +320,7 @@ export const listMeetings = query({
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
 
-    let meetings;
+    let meetings: any[] = [];
     if (args.propertyId) {
       meetings = await ctx.db.query("hoaMeetings")
         .withIndex("by_propertyId", (q) => q.eq("propertyId", args.propertyId!))
@@ -401,7 +401,7 @@ export const listArcRequests = query({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    let requests;
+    let requests: any[] = [];
     if (args.propertyId) {
       requests = await ctx.db.query("arcRequests")
         .withIndex("by_propertyId", (q) => q.eq("propertyId", args.propertyId!))
@@ -416,7 +416,7 @@ export const listArcRequests = query({
     return await Promise.all(
       requests.map(async (request) => {
         const attachmentUrls = await Promise.all(
-          (request.attachmentStorageIds ?? []).map(async (storageId) => await ctx.storage.getUrl(storageId)),
+          (request.attachmentStorageIds ?? []).map(async (storageId: any) => await ctx.storage.getUrl(storageId)),
         );
         return {
           ...request,

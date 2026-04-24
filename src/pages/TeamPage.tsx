@@ -443,7 +443,7 @@ function TeamPageInner() {
             {editingMember?.useRestrictions && (
               <div className="max-h-64 overflow-y-auto rounded-lg border divide-y">
                 {ALL_FEATURES.map((feat) => (
-                  <label
+                  <div
                     key={feat.key}
                     className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 cursor-pointer transition-colors"
                   >
@@ -455,7 +455,7 @@ function TeamPageInner() {
                       <p className="text-sm font-medium">{feat.label}</p>
                       <p className="text-xs text-muted-foreground">{feat.description}</p>
                     </div>
-                  </label>
+                  </div>
                 ))}
               </div>
             )}
